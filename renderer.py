@@ -1,12 +1,12 @@
 from OpenGL.GLUT import *
 from OpenGL.GLU import *
 from OpenGL.GL import *
-from random import randint
 import sys
 import offfile
 import face
 import numpy as np
 import math
+import model
 
 name = 'ball_glut'
 class Renderer:
@@ -20,9 +20,8 @@ class Renderer:
         self.z = 5.
         values = offfile.OffFile(filename)
         values = values.read_file()
-        self.verts = values[0]
-        self.faces = values[1]
-        self.center_object()
+        self.model = model.Model(values[0], values[1])
+        self.model.center()
 
     def main(self):
         # self.c = 0
@@ -31,7 +30,7 @@ class Renderer:
         glutInitWindowSize(400,400)
         glutCreateWindow(name)
 
-        glClearColor(0.99,0.99,0.99,1.)
+        glClearColor(0.8,0.8,0.8,1.)
         glShadeModel(GL_SMOOTH)
         glEnable(GL_CULL_FACE)
         glEnable(GL_DEPTH_TEST)
@@ -99,21 +98,11 @@ class Renderer:
 
     def draw_object(self):
         glBegin(GL_TRIANGLES)
-        for face in self.faces:
+        for face in self.model.faces:
             for v_id in face.vertex_ids():
-                vert = self.verts[v_id]
+                vert = self.model.verts[v_id]
                 glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
-
-    def center_object(self):
-        middle_point = np.array((0., 0., 0.))
-        for vert in self.verts:
-            middle_point += vert
-        middle_point = middle_point / float(len(self.verts))
-        middle_point *= -1
-        print(middle_point)
-        for vert_id in range(len(self.verts)):
-            self.verts[vert_id] += middle_point
 
 
     def draw_background(self):
@@ -130,8 +119,8 @@ class Renderer:
         glPushMatrix()
         glLoadIdentity()
         color = [0.99,0.99,0.99,1.]
-        glMaterialfv(GL_FRONT,GL_DIFFUSE,color)
-        glMaterialfv(GL_FRONT,GL_AMBIENT,1)
+        glMaterialfv(GL_FRONT, GL_DIFFUSE, color)
+        glMaterialfv(GL_FRONT, GL_AMBIENT, 1)
         glBegin(GL_QUADS);
         glVertex2f(0, 0)
         glVertex2f(0, h / 2.)
