@@ -13,6 +13,7 @@ class Model:
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
         self.stepsize = 0.1
+        self.global_matrix = self.calculate_global_matrix()
 
     def center(self):
         middle_point = np.array((0., 0., 0.))
@@ -25,54 +26,49 @@ class Model:
             self.verts[vert_id] += middle_point
 
     def simulate(self):
-        forces=np.zeros(((self.n, 3)))
-        forces[:, 0] =+ 10
+        forces = np.zeros(((self.n, 3)))
+        forces[:, 1] =- 100
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
-        dist = (self.velocities) * self.stepsize
+        dist = self.velocities * self.stepsize
         new_pos = self.verts + dist + acc
-        # new_pos = self.verts
-        # new_pos[:, 1] += 10
-        q_n_1 = new_pos
 
         b_array = np.zeros((self.n, 3)) + new_pos
+        for i in range(10):
+            for con in self.constraints:
+                if con.type() == "SPRING":
+                    dir_vec = self.verts[con.vert_b] - self.verts[con.vert_b]
+                    dir_vec_length = linalg.norm(dir_vec)
+                    strech_amount = dir_vec_length - con.rest_length
+                    update_vec = strech_amount * 0.5  * (dir_vec / max(dir_vec_length, 0.001))
+                    v_a = self.verts[con.vert_a] - update_vec
+                    v_b = self.verts[con.vert_b] + update_vec
+                    S = con.S.T
+                    A = con.A.T
+                    B = A.T
+                    v = S.dot(A).dot(B)
+                    qwe = np.matrix(np.append(v_a, v_b)).T
+                    v = v * qwe
 
-        for con in self.constraints:
-            if con.type() == "SPRING":
-                dir_vec = self.verts[con.vert_b] - self.verts[con.vert_b]
-                dir_vec_length = linalg.norm(dir_vec)
-                strech_amount = dir_vec_length - con.rest_length
-                update_vec = strech_amount * 0.5  * (dir_vec / max(dir_vec_length, 0.001))
-                b_array[con.vert_a] += update_vec
-                b_array[con.vert_b] -= update_vec
-            else:
-                b_array[con.vert_a] += self.verts[con.vert_a]
+                    b_array += v
+                else:
+                    S = con.S.T
+                    # A = con.A
+                    # B = A
+                    # v = S.dot(A).dot(B)
+                    v = S * self.verts[con.vert_a]
+                    b_array += v
 
         print(new_pos)
         print(b_array)
-        gb = self.global_matrix()
-        print(gb)
-        self.verts = linalg.solve(gb, b_array.flatten())
-        self.verts = np.reshape(self.verts,(self.n, 3)) * 100
+        self.verts = linalg.solve(self.global_matrix, b_array)
         print(self.verts)
 
-    def global_matrix(self):
-        M = np.identity(self.n * 3) / (self.stepsize * self.stepsize)
-        sum_m = np.zeros((self.n * 3, self.n * 3))
+    def calculate_global_matrix(self):
+        M = np.identity(self.n) / (self.stepsize * self.stepsize) / 10
+        sum_m = np.zeros((self.n, self.n))
 
         for con in self.constraints:
-            if con.type() == "SPRING":
-                S = np.zeros((6, self.n * 3))
-                S[0, con.vert_a] = 1
-                S[1, con.vert_a + 1] = 1
-                S[2, con.vert_a + 3] = 1
-                S[3, con.vert_b] = 1
-                S[4, con.vert_b + 1] = 1
-                S[5, con.vert_b + 2] = 1
-            else:
-                S = np.zeros((3, self.n * 3))
-                S[0, con.vert_a] = 1
-                S[1, con.vert_a + 1] = 1
-                S[2, con.vert_a + 3] = 1
+            S = con.S
             A = con.A
             sum_m += S.T.dot(A.T).dot(A).dot(S)
         return M + sum_m
@@ -109,11 +105,11 @@ class Model:
                 faces.append(face.Face(v_1, v_2, v_3))
                 Model.add_spring_constraint_set(verts, v_1, v_2, v_3, constraints)
             if v_id < width:
-                Model.add_fixed_constraint(v_id, constraints)
+                Model.add_fixed_constraint(n, v_id, constraints)
         return Model(verts, faces, uvs, constraints=constraints)
 
-    def add_fixed_constraint(v_id, constraints):
-        constraints.append(constraint.Constraint(v_id))
+    def add_fixed_constraint(number_of_verts, v_id, constraints):
+        constraints.append(constraint.Constraint(number_of_verts, v_id))
 
     def add_spring_constraint_set(verts, v_1, v_2, v_3, constraints):
         Model.add_spring_constraint(verts, v_1, v_2, constraints)
@@ -122,4 +118,5 @@ class Model:
 
     def add_spring_constraint(verts, v_1, v_2, constraints):
         rest_length = linalg.norm(verts[v_1] - verts[v_2])
-        constraints.append(constraint.Constraint(v_1, v_2, rest_length))
+        number_of_verts = len(verts)
+        constraints.append(constraint.Constraint(number_of_verts, v_1, v_2, rest_length))
