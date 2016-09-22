@@ -35,28 +35,7 @@ class Model:
         b_array = np.zeros((self.n, 3)) + new_pos
         for i in range(10):
             for con in self.constraints:
-                if con.type() == "SPRING":
-                    dir_vec = self.verts[con.vert_b] - self.verts[con.vert_b]
-                    dir_vec_length = linalg.norm(dir_vec)
-                    strech_amount = dir_vec_length - con.rest_length
-                    update_vec = strech_amount * 0.5  * (dir_vec / max(dir_vec_length, 0.001))
-                    v_a = self.verts[con.vert_a] - update_vec
-                    v_b = self.verts[con.vert_b] + update_vec
-                    S = con.S.T
-                    A = con.A.T
-                    B = A.T
-                    v = S.dot(A).dot(B)
-                    qwe = np.matrix(np.append(v_a, v_b)).T
-                    v = v * qwe
-
-                    b_array += v
-                else:
-                    S = con.S.T
-                    # A = con.A
-                    # B = A
-                    # v = S.dot(A).dot(B)
-                    v = S * self.verts[con.vert_a]
-                    b_array += v
+                b_array += con.calculateLHS(self.verts)
 
         print(new_pos)
         print(b_array)

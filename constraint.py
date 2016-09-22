@@ -41,6 +41,23 @@ class Constraint:
     #         S[1, self.vert_a + 1] = 1
     #         S[2, self.vert_a + 3] = 1
     #     return S
+
+    def calculateLHS(self, verts):
+        if self.vert_a and self.vert_b:
+            dir_vec = verts[self.vert_b] - verts[self.vert_b]
+            dir_vec_length = np.linalg.norm(dir_vec)
+            strech_amount = dir_vec_length - self.rest_length
+            update_vec = strech_amount * 0.5  * (dir_vec / max(dir_vec_length, 0.001))
+            v_a = verts[self.vert_a] - update_vec
+            v_b = verts[self.vert_b] + update_vec
+            S = self.S.T
+            A = self.A.T
+            B = A.T
+            return S.dot(A).dot(B).dot(np.matrix(np.append(v_a, v_b)).T)
+        else:
+            S = self.S.T
+            return S * verts[self.vert_a]
+
     def S_matrix(n, vert_a, vert_b=False):
         if vert_a and vert_b:
             S = np.zeros((6, n))
