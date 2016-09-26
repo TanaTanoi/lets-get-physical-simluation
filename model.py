@@ -2,7 +2,7 @@ import numpy as np
 import numpy.linalg as linalg
 import face
 import constraint
-np.set_printoptions(linewidth=200)
+np.set_printoptions(linewidth=2000)
 class Model:
     def __init__(self, verts, faces, uvs = [], constraints=[]):
         self.n = len(verts)
@@ -12,8 +12,10 @@ class Model:
         self.velocities = np.zeros((self.n, 3))
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
-        self.stepsize = 0.1
+        self.stepsize = 1
         self.global_matrix = self.calculate_global_matrix()
+        self.count = 0
+        print(self.global_matrix)
 
     def center(self):
         middle_point = np.array((0., 0., 0.))
@@ -26,37 +28,60 @@ class Model:
             self.verts[vert_id] += middle_point
 
     def simulate(self):
+        self.count += 1
         forces = np.zeros(((self.n, 3)))
-        forces[:, 1] =- 100
+        forces[:, 1] =- 2
+        if(self.count < 300):
+            forces[35,2] = 50
+        elif(self.count < 600):
+            forces[35,2] = -50
+        else:
+            self.count = 0
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
-        new_pos = self.verts + dist + acc
+        s_n = self.verts + dist + acc
+        q_n_1 = s_n
+        M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        b_array = np.zeros((self.n, 3)) + new_pos
-        for i in range(10):
+        for i in range(1):
+            b_array = M.dot(q_n_1)
             for con in self.constraints:
-                b_array += con.calculateLHS(self.verts)
+                con.calculateRHS(self.verts, b_array)
+            # q_n_1 = linalg.solve(np.identity(self.n * 3) / (self.stepsize ** 2), b_array.flatten())
+            # print(b_array / self.verts)
+            q_n_1 = linalg.solve(self.global_matrix, b_array.flatten())
+            q_n_1 = np.reshape(q_n_1, (self.n, 3))
+        self.velocities = (q_n_1 - self.verts) / self.stepsize
+        # print(self.velocities)
+        # print(q_n_1)
+        # print(b_array)
+        self.verts = np.reshape(q_n_1, (self.n, 3))
+        # print(self.verts)
 
-        print(new_pos)
-        print(b_array)
-        self.verts = linalg.solve(self.global_matrix, b_array)
-        print(self.verts)
+    def wind_forces(time):
+        forces = np.zeros(((self.n, 3)))
 
     def calculate_global_matrix(self):
-        M = np.identity(self.n) / (self.stepsize * self.stepsize) / 10
-        sum_m = np.zeros((self.n, self.n))
+        print(self.n)
+        M = np.identity(self.n * 3) / (self.stepsize * self.stepsize)
+        sum_m = np.zeros((self.n * 3, self.n * 3))
 
+        # THE PROBLEM SEEMS TO BE HERE? IT DOESN'T MOVE OTHERWISE
         for con in self.constraints:
             S = con.S
             A = con.A
-            sum_m += S.T.dot(A.T).dot(A).dot(S)
+            x = S.T.dot(A.T.dot(A.dot(S)))
+            # print(con.type() , "between " , con.vert_a, con.vert_b)
+            # print(x)
+            sum_m += x
+
         return M + sum_m
 
     def generate_plane(width, height, MAX_WIDTH_SIZE=500, MAX_HEIGHT_SIZE=300):
 
         n = width * height
         width_gap = MAX_WIDTH_SIZE / width
-        height_gap = MAX_HEIGHT_SIZE / height
+        height_gap = -MAX_HEIGHT_SIZE / height
 
         verts = np.zeros((n, 3))
         faces = []
@@ -65,11 +90,13 @@ class Model:
         for x in range(width):
             for y in range(height):
                 verts[ x + (y * width) ] = np.array((x * width_gap, y * height_gap, 0 ))
-                uvs[ x + (y * width) ]   = np.array(( (x % width) / width, (y % height) / height ))
+                uvs[ x + (y * width) ]   = np.array(( (x % width) / width, 1 - (y % height) / height ))
 
         for v_id in range(n):
             # if its a thing on the end
             if v_id % width == width - 1:
+                if v_id < n - 1:
+                    Model.add_spring_constraint(verts, v_id, v_id + width, constraints)
                 continue
             if v_id < n - width:
                 v_1 = v_id
@@ -82,13 +109,19 @@ class Model:
                 v_2 = v_id + 1
                 v_3 = v_id - (width - 1)
                 faces.append(face.Face(v_1, v_2, v_3))
-                Model.add_spring_constraint_set(verts, v_1, v_2, v_3, constraints)
-            if v_id < width:
-                Model.add_fixed_constraint(n, v_id, constraints)
+                # Model.add_spring_constraint_set(verts, v_1, v_2, v_3, constraints)
+            if v_id >= n - width and v_id < n:
+                Model.add_spring_constraint(verts, v_id, v_id + 1, constraints)
+            # if v_id < width:
+            #     Model.add_fixed_constraint(n, v_id, constraints)
+        # fix top and bottom left corners
+        Model.add_fixed_constraint(n, 0, verts[0], constraints)
+        bottom_left = width * (height - 1)
+        Model.add_fixed_constraint(n, bottom_left, verts[bottom_left], constraints)
         return Model(verts, faces, uvs, constraints=constraints)
 
-    def add_fixed_constraint(number_of_verts, v_id, constraints):
-        constraints.append(constraint.Constraint(number_of_verts, v_id))
+    def add_fixed_constraint(number_of_verts, v_id, vert, constraints):
+        constraints.append(constraint.Constraint(number_of_verts, v_id, rest_length=vert))
 
     def add_spring_constraint_set(verts, v_1, v_2, v_3, constraints):
         Model.add_spring_constraint(verts, v_1, v_2, constraints)

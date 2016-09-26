@@ -25,37 +25,13 @@ class Renderer:
             self.model = model.Model(values[0], values[1])
             self.model.center()
         else:
-            self.model = model.Model.generate_plane(5, 3)
+            self.model = model.Model.generate_plane(10, 6)
             self.model.center()
 
     def main(self):
         self.window = pyglet.window.Window()
         self.initialize_window_callbacks()
         self.setup()
-        # glClearColor(0.8,0.8,0.8,1.)
-        # glShadeModel(GL_SMOOTH)
-        # glEnable(GL_DEPTH_TEST)
-        # glEnable(GL_LIGHTING)
-        # lightZeroPosition = Renderer.opengl_array([0.,10.,0.,1.])
-        # lightZeroColor = Renderer.opengl_array([0.8,1.0,0.8,1.0]) #green tinged
-        # glLightfv(GL_LIGHT0, GL_POSITION, lightZeroPosition)
-        # glLightfv(GL_LIGHT0, GL_DIFFUSE, lightZeroColor)
-        # glLightf(GL_LIGHT0, GL_CONSTANT_ATTENUATION, 0.1)
-        # glLightf(GL_LIGHT0, GL_LINEAR_ATTENUATION, 0.05)
-        # glEnable(GL_LIGHT0)
-        # glMatrixMode(GL_PROJECTION)
-        # gluPerspective(40.,1.,1.,40.)
-        # gluLookAt(0,0,-10,
-        #           0,0,0,
-        #           0,1,0)
-
-        # glMatrixMode(gl.GL_PROJECTION)
-        # glLoadIdentity()
-        # gluPerspective(60., self.window.width / self.window.height, 1, 100.)
-        # glMatrixMode(GL_MODELVIEW)
-        # glMatrixMode(GL_PROJECTION);
-        # glLoadIdentity();
-        # glOrtho(-8.0, 8.0, -8.0, 8.0, -8.0, 8.0);
         glPushMatrix()
         textures = []
         self.load_texture("doggerflag.png", textures)
@@ -63,9 +39,14 @@ class Renderer:
         pyglet.app.run()
         return
 
+
+    def update(self, dt):
+        self.model.simulate()
+
     def initialize_window_callbacks(self):
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
+        pyglet.clock.schedule_interval(self.update, 1/120.0)
 
     def mouse_input(self, button, state, x, y):
         print("MOUSE ", button, " state: ", state, " x: ", x, " y: ", y)
@@ -82,9 +63,10 @@ class Renderer:
     def on_draw(self):
         self.setup_camera()
 
-        glTranslatef((self.window.width / 2), self.window.height / 2, -900)
+        glTranslatef((self.window.width / 10), self.window.height / 10, -400)
         glRotatef(self.r_x * 50, 0, 1, 0)
         self.draw_object()
+        # self.model.simulate()
 
     def setup_camera(self):
         glMatrixMode(gl.GL_PROJECTION)
@@ -97,7 +79,7 @@ class Renderer:
 
     def draw_object(self):
         glClear(GL_COLOR_BUFFER_BIT)
-
+        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
         glBegin(GL_TRIANGLES)
         for face in self.model.faces:
             for v_id in face.vertex_ids():
@@ -105,6 +87,12 @@ class Renderer:
                 uv = self.model.uvs[v_id]
                 glTexCoord2f(uv[0], uv[1])
                 glVertex3f(vert[0], vert[1], vert[2])
+        glEnd()
+
+        glBegin(GL_LINES)
+        glVertex3f(-100,-200,0)
+        vert = self.model.verts[0]
+        glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
 
     def draw_lines(self):
@@ -116,21 +104,23 @@ class Renderer:
 
     def on_key_press(self, symbol, modifiers):
         if(symbol == key.Q):
-            self.r_x += 0.1
+            self.r_x += 0.3
         elif(symbol == key.E):
-            self.r_x -= 0.1
+            self.r_x -= 0.3
         elif(symbol == key.S):
-            self.z -= 0.5
+            self.z -= 200
         elif(symbol == key.W):
-            self.z += 0.5
+            self.z += 200
         elif(symbol == key.A):
-            self.x += 2
+            self.x += 200
         elif(symbol == key.D):
-            self.x -= 2
+            self.x -= 200
         elif(symbol == key.Z):
             self.r_x += 90
         elif(symbol == key.SPACE):
             self.model.simulate()
+        elif(symbol == 65307): # escape
+            exit()
 
     def setup(self):
         glMatrixMode(gl.GL_PROJECTION)
