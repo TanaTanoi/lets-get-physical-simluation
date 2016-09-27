@@ -7,6 +7,7 @@ import math
 
 np.set_printoptions(linewidth=2000)
 class Model:
+    drag = 0.95
     def __init__(self, verts, faces, uvs = [], constraints=[]):
         self.n = len(verts)
         self.verts = verts
@@ -18,6 +19,7 @@ class Model:
         self.stepsize = 1
         self.global_matrix = self.calculate_global_matrix()
         self.count = 0
+        self.wind_magnitude = 0.3
         print(self.global_matrix)
 
     def center(self):
@@ -32,28 +34,29 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        forces = Model.wind_forces(self.count, self.n)
+        forces = self.wind_forces(self.count)
+        forces[:, 1] = -0.05
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        for i in range(4):
+        for i in range(10):
             b_array = M.dot(q_n_1)
             for con in self.constraints:
                 con.calculateRHS(s_n, b_array)
             q_n_1 = linalg.solve(self.global_matrix, b_array.flatten())
             q_n_1 = np.reshape(q_n_1, (self.n, 3))
-        self.velocities = (q_n_1 - self.verts) / self.stepsize
+        self.velocities = (q_n_1 - self.verts) * self.drag / self.stepsize
         self.verts = np.reshape(q_n_1, (self.n, 3))
 
-    def wind_forces(time, n):
+    def wind_forces(self, time):
         time /= 10000
-        forces = np.zeros(((n, 3)))
+        forces = np.zeros(((self.n, 3)))
         angle = noise.pnoise1(time) * math.pi * 2
-        forces[:, 0] = math.cos(angle) * 0.1
-        forces[:, 2] = math.sin(angle) * 0.1
+        forces[:, 0] = math.cos(angle) * self.wind_magnitude
+        forces[:, 2] = math.sin(angle) * self.wind_magnitude
         return forces
 
     def calculate_global_matrix(self):

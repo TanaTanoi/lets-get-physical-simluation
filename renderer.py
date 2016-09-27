@@ -1,5 +1,6 @@
 import pyglet
 from pyglet.window import key
+from pyglet.window import mouse
 from pyglet.gl import *
 import sys
 import offfile
@@ -17,7 +18,8 @@ class Renderer:
         self.m_down = False
         # r_ is the rotations prefix
         self.r_x = 0
-        self.z = 0
+        self.z = -500
+        self.y = 100
         self.x = 0
         if len(filename) > 0:
             values = offfile.OffFile(filename)
@@ -26,7 +28,6 @@ class Renderer:
             self.model.center()
         else:
             self.model = model.Model.generate_plane(15, 9)
-            self.model.center()
 
     def main(self):
         self.window = pyglet.window.Window()
@@ -39,13 +40,13 @@ class Renderer:
         pyglet.app.run()
         return
 
-
     def update(self, dt):
         self.model.simulate()
 
     def initialize_window_callbacks(self):
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
+        self.window.on_mouse_drag = self.on_mouse_drag
         pyglet.clock.schedule_interval(self.update, 1/120.0)
 
     def mouse_input(self, button, state, x, y):
@@ -54,17 +55,19 @@ class Renderer:
         self.m_y = y
         self.m_down = state == 0
 
-    def mouse_motion(self, x, y):
-        print("DRAG x: ", x,  " y: ",y )
+    def on_mouse_drag(self, x, y, dx, dy, buttons, modifiers):
+        if(buttons & mouse.LEFT):
+            self.r_x += dx
+
+    def on_mouse_motion(self, x, y, dx, dy):
         if(self.m_down):
-            self.r_x += x - self.m_x
+            self.r_x += dx
             self.m_x = x
 
     def on_draw(self):
         self.setup_camera()
-
-        glTranslatef((self.window.width / 10), self.window.height / 10, -400)
-        glRotatef(self.r_x * 50, 0, 1, 0)
+        glTranslatef(0, self.y, self.z)
+        glRotatef(self.r_x, 0, 1, 0)
         self.draw_object()
 
     def setup_camera(self):
@@ -89,7 +92,7 @@ class Renderer:
         glEnd()
 
         glBegin(GL_LINES)
-        glVertex3f(-100,-200,0)
+        glVertex3f(0,-300,0)
         vert = self.model.verts[0]
         glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
@@ -107,15 +110,21 @@ class Renderer:
         elif(symbol == key.E):
             self.r_x -= 0.3
         elif(symbol == key.S):
-            self.z -= 200
+            self.z -= 50
         elif(symbol == key.W):
-            self.z += 200
+            self.z += 50
         elif(symbol == key.A):
             self.x += 200
         elif(symbol == key.D):
             self.x -= 200
         elif(symbol == key.Z):
             self.r_x += 90
+        elif(symbol == key.R):
+            if(self.model.wind_magnitude != 0):
+                self.model.wind_magnitude = 0
+            else:
+                self.model.wind_magnitude = 0.1
+            print("Window velocity is ", self.model.wind_magnitude)
         elif(symbol == key.SPACE):
             self.model.simulate()
         elif(symbol == key.ESCAPE): # escape
