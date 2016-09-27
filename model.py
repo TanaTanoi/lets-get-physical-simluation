@@ -2,6 +2,9 @@ import numpy as np
 import numpy.linalg as linalg
 import face
 import constraint
+import noise
+import math
+
 np.set_printoptions(linewidth=2000)
 class Model:
     def __init__(self, verts, faces, uvs = [], constraints=[]):
@@ -12,7 +15,7 @@ class Model:
         self.velocities = np.zeros((self.n, 3))
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
-        self.stepsize = 0.9
+        self.stepsize = 1
         self.global_matrix = self.calculate_global_matrix()
         self.count = 0
         print(self.global_matrix)
@@ -29,21 +32,14 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        forces = np.zeros(((self.n, 3)))
-        forces[:, 1] =- 0.01
-        if(self.count < 300):
-            forces[:,2] = 0.20
-        elif(self.count < 600):
-            forces[:,2] = -0.20
-        else:
-            self.count = 0
+        forces = Model.wind_forces(self.count, self.n)
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        for i in range(10):
+        for i in range(4):
             b_array = M.dot(q_n_1)
             for con in self.constraints:
                 con.calculateRHS(s_n, b_array)
@@ -52,8 +48,13 @@ class Model:
         self.velocities = (q_n_1 - self.verts) / self.stepsize
         self.verts = np.reshape(q_n_1, (self.n, 3))
 
-    def wind_forces(time):
-        forces = np.zeros(((self.n, 3)))
+    def wind_forces(time, n):
+        time /= 10000
+        forces = np.zeros(((n, 3)))
+        angle = noise.pnoise1(time) * math.pi * 2
+        forces[:, 0] = math.cos(angle) * 0.1
+        forces[:, 2] = math.sin(angle) * 0.1
+        return forces
 
     def calculate_global_matrix(self):
         print(self.n)
