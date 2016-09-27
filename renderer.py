@@ -27,7 +27,7 @@ class Renderer:
             self.model = model.Model(values[0], values[1])
             self.model.center()
         else:
-            self.model = model.Model.generate_plane(15, 9)
+            self.model = model.Model.generate_plane(10, 6)
 
     def main(self):
         self.window = pyglet.window.Window()
@@ -47,7 +47,7 @@ class Renderer:
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
         self.window.on_mouse_drag = self.on_mouse_drag
-        pyglet.clock.schedule_interval(self.update, 1/120.0)
+        pyglet.clock.schedule_interval(self.update, 1 / 30.0)
 
     def mouse_input(self, button, state, x, y):
         print("MOUSE ", button, " state: ", state, " x: ", x, " y: ", y)
@@ -120,11 +120,11 @@ class Renderer:
         elif(symbol == key.Z):
             self.r_x += 90
         elif(symbol == key.R):
-            if(self.model.wind_magnitude != 0):
-                self.model.wind_magnitude = 0
-            else:
-                self.model.wind_magnitude = 0.1
-            print("Window velocity is ", self.model.wind_magnitude)
+            self.model.wind_magnitude -= 0.05
+            print("Wind magnitude is ", self.model.wind_magnitude)
+        elif(symbol == key.T):
+            self.model.wind_magnitude += 0.05
+            print("Wind magnitude is ", self.model.wind_magnitude)
         elif(symbol == key.SPACE):
             self.model.simulate()
         elif(symbol == key.ESCAPE): # escape

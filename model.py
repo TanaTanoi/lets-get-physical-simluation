@@ -42,7 +42,7 @@ class Model:
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        for i in range(10):
+        for i in range(1):
             b_array = M.dot(q_n_1)
             for con in self.constraints:
                 con.calculateRHS(s_n, b_array)
