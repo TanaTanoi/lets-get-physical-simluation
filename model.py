@@ -12,7 +12,7 @@ class Model:
         self.velocities = np.zeros((self.n, 3))
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
-        self.stepsize = 1
+        self.stepsize = 0.9
         self.global_matrix = self.calculate_global_matrix()
         self.count = 0
         print(self.global_matrix)
@@ -30,11 +30,11 @@ class Model:
     def simulate(self):
         self.count += 1
         forces = np.zeros(((self.n, 3)))
-        forces[:, 1] =- 2
+        forces[:, 1] =- 0.01
         if(self.count < 300):
-            forces[35,2] = 50
+            forces[:,2] = 0.20
         elif(self.count < 600):
-            forces[35,2] = -50
+            forces[:,2] = -0.20
         else:
             self.count = 0
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
@@ -43,20 +43,14 @@ class Model:
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        for i in range(1):
+        for i in range(10):
             b_array = M.dot(q_n_1)
             for con in self.constraints:
-                con.calculateRHS(self.verts, b_array)
-            # q_n_1 = linalg.solve(np.identity(self.n * 3) / (self.stepsize ** 2), b_array.flatten())
-            # print(b_array / self.verts)
+                con.calculateRHS(s_n, b_array)
             q_n_1 = linalg.solve(self.global_matrix, b_array.flatten())
             q_n_1 = np.reshape(q_n_1, (self.n, 3))
         self.velocities = (q_n_1 - self.verts) / self.stepsize
-        # print(self.velocities)
-        # print(q_n_1)
-        # print(b_array)
         self.verts = np.reshape(q_n_1, (self.n, 3))
-        # print(self.verts)
 
     def wind_forces(time):
         forces = np.zeros(((self.n, 3)))
@@ -66,13 +60,10 @@ class Model:
         M = np.identity(self.n * 3) / (self.stepsize * self.stepsize)
         sum_m = np.zeros((self.n * 3, self.n * 3))
 
-        # THE PROBLEM SEEMS TO BE HERE? IT DOESN'T MOVE OTHERWISE
         for con in self.constraints:
             S = con.S
             A = con.A
             x = S.T.dot(A.T.dot(A.dot(S)))
-            # print(con.type() , "between " , con.vert_a, con.vert_b)
-            # print(x)
             sum_m += x
 
         return M + sum_m
@@ -98,22 +89,22 @@ class Model:
                 if v_id < n - 1:
                     Model.add_spring_constraint(verts, v_id, v_id + width, constraints)
                 continue
+            # points before the bottom line
             if v_id < n - width:
                 v_1 = v_id
                 v_2 = v_id + width
                 v_3 = v_id + 1
                 faces.append(face.Face(v_1, v_2, v_3))
                 Model.add_spring_constraint_set(verts, v_1, v_2, v_3, constraints)
+            # points after the first line
             if v_id >= width:
                 v_1 = v_id
                 v_2 = v_id + 1
                 v_3 = v_id - (width - 1)
                 faces.append(face.Face(v_1, v_2, v_3))
-                # Model.add_spring_constraint_set(verts, v_1, v_2, v_3, constraints)
+            # the lines along the bottom
             if v_id >= n - width and v_id < n:
                 Model.add_spring_constraint(verts, v_id, v_id + 1, constraints)
-            # if v_id < width:
-            #     Model.add_fixed_constraint(n, v_id, constraints)
         # fix top and bottom left corners
         Model.add_fixed_constraint(n, 0, verts[0], constraints)
         bottom_left = width * (height - 1)
@@ -121,7 +112,7 @@ class Model:
         return Model(verts, faces, uvs, constraints=constraints)
 
     def add_fixed_constraint(number_of_verts, v_id, vert, constraints):
-        constraints.append(constraint.Constraint(number_of_verts, v_id, rest_length=vert))
+        constraints.append(constraint.Constraint(number_of_verts, v_id, fixed_point=vert))
 
     def add_spring_constraint_set(verts, v_1, v_2, v_3, constraints):
         Model.add_spring_constraint(verts, v_1, v_2, constraints)
@@ -131,4 +122,4 @@ class Model:
     def add_spring_constraint(verts, v_1, v_2, constraints):
         rest_length = linalg.norm(verts[v_1] - verts[v_2])
         number_of_verts = len(verts)
-        constraints.append(constraint.Constraint(number_of_verts, v_1, v_2, rest_length))
+        constraints.append(constraint.Constraint(number_of_verts, v_1, v_2, rest_length=rest_length))

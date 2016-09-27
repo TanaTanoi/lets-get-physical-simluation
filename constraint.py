@@ -1,10 +1,11 @@
 import numpy as np
 
 class Constraint:
-    def __init__(self, number_of_verts, vert_a, vert_b=False, rest_length=False):
+    def __init__(self, number_of_verts, vert_a, vert_b=False, rest_length=False, fixed_point=False):
         self.vert_a = vert_a
         self.vert_b = vert_b
         self.rest_length = rest_length
+        self.fixed_point = fixed_point
         self.A = Constraint.A_matrix(self.type())
         self.S = Constraint.S_matrix(self.type(), number_of_verts, vert_a, vert_b=vert_b)
 
@@ -44,7 +45,7 @@ class Constraint:
             b_array[self.vert_a] += v_a
             b_array[self.vert_b] += v_b
         else:
-            b_array[self.vert_a] += self.rest_length
+            b_array[self.vert_a] += self.fixed_point
 
     def S_matrix(constraint_type, n, vert_a, vert_b=False):
         if constraint_type  == "SPRING":
