@@ -27,7 +27,7 @@ class Renderer:
             self.model = model.Model(values[0], values[1])
             self.model.center()
         else:
-            self.model = model.Model.generate_plane(3, 3)
+            self.model = model.Model.generate_plane(2, 2)
 
     def main(self):
         self.window = pyglet.window.Window()
@@ -81,11 +81,11 @@ class Renderer:
 
     def draw_object(self):
         glClear(GL_COLOR_BUFFER_BIT)
-        # glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
+        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
         glBegin(GL_TRIANGLES)
         for face in self.model.faces:
             for v_id in face.vertex_ids():
-                vert = self.model.verts[v_id]
+                vert = self.model.rendering_verts[v_id]
                 uv = self.model.uvs[v_id]
                 glTexCoord2f(uv[0], uv[1])
                 glVertex3f(vert[0], vert[1], vert[2])
