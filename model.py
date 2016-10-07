@@ -21,7 +21,7 @@ class Model:
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
         self.stepsize = 1
-        self.global_matrix = self.calculate_global_matrix() * 2
+        self.global_matrix = self.calculate_global_matrix()
         self.count = 0
         self.wind_magnitude = 0.3
         print(self.global_matrix)
@@ -37,10 +37,10 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        # forces = self.wind_forces(self.count)
-        forces = np.zeros(((self.n, 3)))
-        # forces[:, 1] = -0.5
-        # forces[:, 1] = -1
+        forces = self.wind_forces(self.count)
+        # forces = np.zeros(((self.n, 3)))
+        # forces[1, 2] = 1
+        # forces[0:-1, 1] = 1
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
@@ -49,16 +49,20 @@ class Model:
         self.calculate_cell_rotations(s_n)
         for i in range(1):
             # b_array = M.dot(q_n_1)
-            b_array = np.zeros((self.n + 1, 3))
+            b_array = np.zeros((self.n + 2, 3))
             for i in range(self.n):
                 b_array[i] = self.calculate_b_for(i)
-            b_array[-1] = self.verts[0]
+            b_array[-2] = self.verts[0]
+            # b_array[-1] = self.verts[self.n - math.sqrt(self.n)]
+            b_array[-1] = self.verts[1]
+            # b_array[-1] = 1
             # print(b_array)
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
-            q_n_1 = q_n_1[0:-1, :] # all but last constrainted point
+            q_n_1 = q_n_1[0:-2, :] # all but last constrainted point
 
         self.velocities = (q_n_1 - self.verts) * self.drag / self.stepsize
         self.rendering_verts = q_n_1
+        self.verts = self.rendering_verts
 
     def calculate_b_for(self, i):
         b = np.zeros((1, 3))
@@ -66,15 +70,16 @@ class Model:
         for j in neighbours:
             r_ij = self.cell_rotations[i] + self.cell_rotations[j]
             p_ij = self.verts[i] - self.verts[j]
-            b += r_ij.dot(p_ij)
+            b += r_ij.dot(p_ij) * 0.5
+            # 1/2 for weight
         return b
 
     def wind_forces(self, time):
         time /= 10000
         forces = np.zeros(((self.n, 3)))
         angle = noise.pnoise1(time) * math.pi * 2
-        forces[:, 0] = math.cos(angle) * self.wind_magnitude
-        forces[:, 2] = math.sin(angle) * self.wind_magnitude
+        forces[0:-1, 0] = math.cos(angle) * self.wind_magnitude
+        forces[0:-1, 2] = math.sin(angle) * self.wind_magnitude
         return forces
 
     def calculate_cell_rotations(self, s_n):
@@ -121,9 +126,9 @@ class Model:
         # 
         # return M + sum_m
 
-        M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
-        weights = np.zeros((self.n + 1, self.n + 1))
-        weight_sum = np.zeros((self.n + 1, self.n + 1))
+        M = np.identity(self.n + 2) / (self.stepsize * self.stepsize)
+        weights = np.zeros((self.n + 2, self.n + 2))
+        weight_sum = np.zeros((self.n + 2, self.n + 2))
         for con in self.constraints:
             if con.type() == "SPRING":
                 weights[con.vert_a, con.vert_b] = 1
@@ -131,10 +136,12 @@ class Model:
                 weight_sum[con.vert_a, con.vert_a] += 1
                 weight_sum[con.vert_b, con.vert_b] += 1
 
-        # Fix some arbitraty last start point
-        x = (weights - weight_sum) * -1# + M
-        x[0, -1] = 1
-        x[-1, 0] = 1
+        # Fix some arbitraty last start point and end point
+        x = weight_sum - weights
+        x[0, -2] = 1
+        x[-2, 0] = 1
+        x[1, -1] = 1
+        x[-1, 1] = 1
         return x
         # x = np.zeros((self.n, self.n))
         # x = np.identity(self.n)
