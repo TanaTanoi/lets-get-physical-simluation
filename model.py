@@ -46,9 +46,9 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        # forces = self.wind_forces(self.count)
-        forces = np.zeros(((self.n, 3)))
-        # forces[1, 2] = 1
+        forces = self.wind_forces(self.count) * 0.1
+        # forces = np.zeros(((self.n, 3)))
+        # forces[1, 2] = 0.1
         # forces[0:-1, 1] = -1
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
@@ -78,12 +78,12 @@ class Model:
 
         self.velocities = (q_n_1 - self.verts) * self.drag / self.stepsize
         self.rendering_verts = q_n_1
-        self.verts = self.rendering_verts
+        # self.verts = self.rendering_verts
 
     def calculate_b_for(self, i, s_n):
         b = np.zeros((1, 3))
         for face in self.verts_to_tri[i]:
-            T = self.potential_for_triangle(face, s_n)
+            T = self.potential_for_triangle(face, s_n, i)
             print(T)
             for o_v in face.other_points(i):
                 b += T.dot(self.verts[i] - self.verts[o_v])
@@ -105,33 +105,30 @@ class Model:
             print(rotation)
             self.cell_rotations[vert_id] = rotation
 
-    def potential_for_triangle(self, face, prime_verts):
-        v1 = self.verts[face.v1]
-        v2 = self.verts[face.v2]
-        v3 = self.verts[face.v3]
-        x_f = np.matrix((v2 - v1, v3 - v1, (0,0,0)))
+    def potential_for_triangle(self, face, prime_verts, point):
+        other_points = face.other_points(point)
+        v1 = self.verts[point]
+        v2 = self.verts[other_points[0]]
+        v3 = self.verts[other_points[1]]
+        x_f = np.matrix((v3 - v1, v2 - v1, (1,1,1)))
 
-        v1 = prime_verts[face.v1]
-        v2 = prime_verts[face.v2]
-        v3 = prime_verts[face.v3]
-        x_g = np.matrix((v2 - v1, v3 - v1, (0,0,0)))
+        v1 = prime_verts[point]
+        v2 = prime_verts[other_points[0]]
+        v3 = prime_verts[other_points[1]]
+        x_g = np.matrix((v3 - v1, v2 - v1, (1,1,1)))
 
         print("xf", x_f)
         print("xg", x_g)
         combined = x_g.dot(np.linalg.pinv(x_f))
         print("combined")
         print(combined)
-        U, s, V_t = np.linalg.svd(combined)
-
-        s_p = np.diag(np.clip(s, 0, 1))
-        # return np.linalg.norm(s - s_p) ** 2
-        return U.dot(s_p).dot(V_t)
+        return self.clamped_svd_for_matrix(combined)
         # return np.identity(3)
 
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
-
         s = np.diag(np.clip(s, 0, 1))
+        print(s)
         return U.dot(s).dot(V_t)
 
     def calculate_global_matrix(self):

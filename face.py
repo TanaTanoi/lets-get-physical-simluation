@@ -17,7 +17,7 @@ class Face:
     def other_points(self, i):
         v_ids = set(self.vertex_ids())
         v_ids.remove(i)
-        return v_ids
+        return list(v_ids)
 
     def vertex_ids(self):
         return [self.v1, self.v2, self.v3]
