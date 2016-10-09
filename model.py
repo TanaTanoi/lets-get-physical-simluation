@@ -7,7 +7,7 @@ import math
 
 np.set_printoptions(linewidth=2000)
 class Model:
-    drag = 0.95
+    drag = 0.05
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[]):
         self.n = len(verts)
         self.verts = verts
@@ -29,8 +29,6 @@ class Model:
         self.constraints = constraints
         self.stepsize = 1
         self.global_matrix = self.calculate_global_matrix()# * 2
-        # for i in range(len(neighbours)):
-        #     neighbours[i] = list(set(neighbours[i]))
         self.count = 0
         self.wind_magnitude = 0.3
         print(self.global_matrix)
@@ -46,10 +44,10 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        forces = self.wind_forces(self.count) * 0.1
-        # forces = np.zeros(((self.n, 3)))
-        # forces[1, 2] = 0.1
-        # forces[0:-1, 1] = -1
+        # forces = self.wind_forces(self.count) * 0.1
+        forces = np.zeros(((self.n, 3)))
+        forces[1, 2] = 0.1
+        # forces[-2, 2] = 1
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
@@ -58,27 +56,18 @@ class Model:
         # self.calculate_cell_rotations(s_n)
         print(self.global_matrix)
         for i in range(1):
-            # b_array = M.dot(q_n_1)
             b_array = np.zeros((self.n + 1, 3))
+            # b_array[0:-1] = M.dot(q_n_1)
             for i in range(self.n):
                 b_array[i] = self.calculate_b_for(i, s_n)
             b_array[-1] = self.verts[0]
-            # b_array[-1] = self.verts[self.n - math.sqrt(self.n)]
-            # b_array[-1] = self.verts[1]
-            # print(b_array)
-            # b_array[0:-2] = self.global_matrix[0:-2, 0:-2].dot(self.verts)
-            # print("good one")
-            # print(b_array)
-            print("normal")
-            print(self.verts)
-            # b_array[-1] = 1
-            # print(b_array)
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
             q_n_1 = q_n_1[0:-1, :] # all but last constrainted point
 
-        self.velocities = (q_n_1 - self.verts) * self.drag / self.stepsize
+        # self.velocities = np.around(((q_n_1 - self.rendering_verts) * self.drag) / self.stepsize, 11)
+        print("Velocitties \n", self.velocities)
         self.rendering_verts = q_n_1
-        # self.verts = self.rendering_verts
+        self.verts = self.rendering_verts
 
     def calculate_b_for(self, i, s_n):
         b = np.zeros((1, 3))
@@ -119,7 +108,7 @@ class Model:
 
         print("xf", x_f)
         print("xg", x_g)
-        combined = x_g.dot(np.linalg.pinv(x_f))
+        combined = x_g.dot(np.linalg.inv(x_f))
         print("combined")
         print(combined)
         return self.clamped_svd_for_matrix(combined)
@@ -127,9 +116,8 @@ class Model:
 
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
-        s = np.diag(np.clip(s, 0, 1))
-        print(s)
-        return U.dot(s).dot(V_t)
+        s = np.diag(np.clip(s, 0.8, 1))
+        return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_global_matrix(self):
         # print(self.n)
@@ -144,7 +132,8 @@ class Model:
         # 
         # return M + sum_m
 
-        M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
+        # M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
+        # M[self.n, self.n] = 0
         weights = np.zeros((self.n + 1, self.n + 1))
         weight_sum = np.zeros((self.n + 1, self.n + 1))
         # for i in range(self.n):
@@ -170,7 +159,7 @@ class Model:
         x[-1, 0] = 1
         # x[1, -1] = 1
         # x[-1, 1] = 1
-        return x
+        return x# + M
 
     def calculate_rotation_matrix_for_cell(self, vert_id, s_n):
         covariance_matrix = self.calculate_covariance_matrix_for_cell(vert_id, s_n)
