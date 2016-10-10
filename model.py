@@ -7,7 +7,7 @@ import math
 
 np.set_printoptions(linewidth=2000)
 class Model:
-    drag = 0.05
+    drag = 0.95
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[]):
         self.n = len(verts)
         self.verts = verts
@@ -46,8 +46,10 @@ class Model:
         self.count += 1
         # forces = self.wind_forces(self.count) * 0.1
         forces = np.zeros(((self.n, 3)))
-        forces[1, 2] = 0.1
-        # forces[-2, 2] = 1
+        if self.count < 100:
+        #     forces[1, 2] = 1
+            forces[-1, 0] = 1
+        forces[1:, 1] = -10
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
@@ -64,10 +66,10 @@ class Model:
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
             q_n_1 = q_n_1[0:-1, :] # all but last constrainted point
 
-        # self.velocities = np.around(((q_n_1 - self.rendering_verts) * self.drag) / self.stepsize, 11)
+        self.velocities = np.around(((q_n_1 - self.verts) * self.drag) / self.stepsize, 11)
         print("Velocitties \n", self.velocities)
         self.rendering_verts = q_n_1
-        self.verts = self.rendering_verts
+        # self.verts = self.rendering_verts
 
     def calculate_b_for(self, i, s_n):
         b = np.zeros((1, 3))
@@ -99,24 +101,22 @@ class Model:
         v1 = self.verts[point]
         v2 = self.verts[other_points[0]]
         v3 = self.verts[other_points[1]]
-        x_f = np.matrix((v3 - v1, v2 - v1, (1,1,1)))
+        x_f = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
 
         v1 = prime_verts[point]
         v2 = prime_verts[other_points[0]]
         v3 = prime_verts[other_points[1]]
-        x_g = np.matrix((v3 - v1, v2 - v1, (1,1,1)))
+        x_g = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
 
-        print("xf", x_f)
-        print("xg", x_g)
-        combined = x_g.dot(np.linalg.inv(x_f))
-        print("combined")
-        print(combined)
+        combined = x_g.dot(np.linalg.pinv(x_f))
         return self.clamped_svd_for_matrix(combined)
         # return np.identity(3)
 
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
-        s = np.diag(np.clip(s, 0.8, 1))
+        # s = np.diag(s)
+        s = np.diag(np.clip(s, 0.1, 1))
+        # return s
         return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_global_matrix(self):

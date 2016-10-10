@@ -47,7 +47,7 @@ class Renderer:
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
         self.window.on_mouse_drag = self.on_mouse_drag
-        pyglet.clock.schedule_interval(self.update, 1 / 30.0)
+        pyglet.clock.schedule_interval(self.update, 1 / 10.0)
 
     def mouse_input(self, button, state, x, y):
         print("MOUSE ", button, " state: ", state, " x: ", x, " y: ", y)
