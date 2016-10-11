@@ -8,6 +8,7 @@ import math
 np.set_printoptions(linewidth=2000)
 class Model:
     drag = 0.95
+    arap = True
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[]):
         self.n = len(verts)
         self.verts = verts
@@ -28,7 +29,10 @@ class Model:
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
         self.stepsize = 1
-        self.global_matrix = self.calculate_global_matrix()# * 2
+        if(self.arap):
+            self.global_matrix = self.calculate_cell_global_matrix()
+        else:
+            self.global_matrix = self.calculate_triangle_global_matrix()
         self.count = 0
         self.wind_magnitude = 0.3
         print(self.global_matrix)
@@ -48,20 +52,23 @@ class Model:
         forces = np.zeros(((self.n, 3)))
         if self.count < 100:
         #     forces[1, 2] = 1
-            forces[-1, 0] = 1
-        forces[1:, 1] = -10
+            forces[1:, 1] = -100
+        # forces[1:, 1] = -10
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
-        # self.calculate_cell_rotations(s_n)
+        self.calculate_cell_rotations(s_n)
         print(self.global_matrix)
         for i in range(1):
             b_array = np.zeros((self.n + 1, 3))
             # b_array[0:-1] = M.dot(q_n_1)
             for i in range(self.n):
-                b_array[i] = self.calculate_b_for(i, s_n)
+                if(self.arap):
+                    b_array[i] = self.calculate_b_for_cell(i)
+                else:
+                    b_array[i] = self.calculate_b_for_triangle(i, s_n)
             b_array[-1] = self.verts[0]
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
             q_n_1 = q_n_1[0:-1, :] # all but last constrainted point
@@ -71,13 +78,22 @@ class Model:
         self.rendering_verts = q_n_1
         # self.verts = self.rendering_verts
 
-    def calculate_b_for(self, i, s_n):
+    def calculate_b_for_triangle(self, i, s_n):
         b = np.zeros((1, 3))
         for face in self.verts_to_tri[i]:
             T = self.potential_for_triangle(face, s_n, i)
-            print(T)
             for o_v in face.other_points(i):
                 b += T.dot(self.verts[i] - self.verts[o_v])
+        return b
+
+    def calculate_b_for_cell(self, i):
+        b = np.zeros((1, 3))
+        neighbours = self.neighbours[i]
+        for j in neighbours:
+            r_ij = self.cell_rotations[i] + self.cell_rotations[j]
+            p_ij = self.verts[i] - self.verts[j]
+            b += r_ij.dot(p_ij) * 0.5
+            # 1/2 for weight
         return b
 
     def wind_forces(self, time):
@@ -116,34 +132,11 @@ class Model:
         U, s, V_t = np.linalg.svd(matrix)
         # s = np.diag(s)
         s = np.diag(np.clip(s, 0.1, 1))
-        # return s
         return np.around(U.dot(s).dot(V_t), 11)
 
-    def calculate_global_matrix(self):
-        # print(self.n)
-        # M = np.identity(self.n * 3)# / (self.stepsize * self.stepsize)
-        # sum_m = np.zeros((self.n * 3, self.n * 3))
-        # 
-        # for con in self.constraints:
-        #     S = con.S
-        #     A = con.A
-        #     x = S.T.dot(A.T.dot(A.dot(S)))
-        #     sum_m += x
-        # 
-        # return M + sum_m
-
-        # M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
-        # M[self.n, self.n] = 0
+    def calculate_triangle_global_matrix(self):
         weights = np.zeros((self.n + 1, self.n + 1))
         weight_sum = np.zeros((self.n + 1, self.n + 1))
-        # for i in range(self.n):
-        #     weight_sum[i, i] = len(self.neighbours[i])
-        # for con in self.constraints:
-        #     if con.type() == "SPRING":
-        #         weights[con.vert_a, con.vert_b] += 1
-        #         weights[con.vert_b, con.vert_a] += 1
-                # weight_sum[con.vert_a, con.vert_a] += 1
-                # weight_sum[con.vert_b, con.vert_b] += 1
         for face in self.faces:
             verts = face.vertex_ids()
             for k in range(3):
@@ -153,13 +146,27 @@ class Model:
                 weights[v_2, v_1] += 1
                 weight_sum[v_1, v_1] += 1
                 weight_sum[v_2, v_2] += 1
+        x = weight_sum - weights
+        x[0, -1] = 1
+        x[-1, 0] = 1
+        return x
+
+    def calculate_cell_global_matrix(self):
+        M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
+        weights = np.zeros((self.n + 1, self.n + 1))
+        weight_sum = np.zeros((self.n + 1, self.n + 1))
+        for con in self.constraints:
+            if con.type() == "SPRING":
+                weights[con.vert_a, con.vert_b] = 1
+                weights[con.vert_b, con.vert_a] = 1
+                weight_sum[con.vert_a, con.vert_a] += 1
+                weight_sum[con.vert_b, con.vert_b] += 1
+
         # Fix some arbitraty last start point and end point
         x = weight_sum - weights
         x[0, -1] = 1
         x[-1, 0] = 1
-        # x[1, -1] = 1
-        # x[-1, 1] = 1
-        return x# + M
+        return x
 
     def calculate_rotation_matrix_for_cell(self, vert_id, s_n):
         covariance_matrix = self.calculate_covariance_matrix_for_cell(vert_id, s_n)

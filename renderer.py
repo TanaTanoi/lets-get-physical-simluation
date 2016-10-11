@@ -47,7 +47,7 @@ class Renderer:
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
         self.window.on_mouse_drag = self.on_mouse_drag
-        pyglet.clock.schedule_interval(self.update, 1 / 10.0)
+        pyglet.clock.schedule_interval(self.update, 1 / 20.0)
 
     def mouse_input(self, button, state, x, y):
         print("MOUSE ", button, " state: ", state, " x: ", x, " y: ", y)
@@ -81,7 +81,7 @@ class Renderer:
 
     def draw_object(self):
         glClear(GL_COLOR_BUFFER_BIT)
-        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
+        # glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
         glBegin(GL_TRIANGLES)
         for face in self.model.faces:
             for v_id in face.vertex_ids():
