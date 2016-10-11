@@ -120,10 +120,10 @@ class Renderer:
         elif(symbol == key.Z):
             self.r_x += 90
         elif(symbol == key.R):
-            self.model.wind_magnitude -= 0.05
+            self.model.wind_magnitude -= 0.05 * 10
             print("Wind magnitude is ", self.model.wind_magnitude)
         elif(symbol == key.T):
-            self.model.wind_magnitude += 0.05
+            self.model.wind_magnitude += 0.05 * 10
             print("Wind magnitude is ", self.model.wind_magnitude)
         elif(symbol == key.SPACE):
             self.model.simulate()

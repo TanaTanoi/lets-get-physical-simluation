@@ -8,7 +8,7 @@ import math
 np.set_printoptions(linewidth=2000)
 class Model:
     drag = 0.95
-    arap = True
+    arap = False
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[]):
         self.n = len(verts)
         self.verts = verts
@@ -38,7 +38,7 @@ class Model:
         else:
             self.global_matrix = self.calculate_triangle_global_matrix()
         self.count = 0
-        self.wind_magnitude = 0.3
+        self.wind_magnitude = 0
         print(self.global_matrix)
 
     def center(self):
@@ -52,7 +52,10 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        forces = self.wind_forces(self.count) * 10
+        forces = self.wind_forces(self.count)
+        forces[:, 1] = -10
+        forces[0, :] = 0
+        forces[20, :] = 0
         # forces = np.zeros(((self.n, 3)))
         # if self.count < 50:
         #     forces[1:, 2] = -100
@@ -60,7 +63,6 @@ class Model:
         # forces[1:, 2] = 10
         # if self.count > 100:
         #     self.count = 0
-        forces[1:, 1] = -100
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
@@ -108,8 +110,8 @@ class Model:
         time /= 10000
         forces = np.zeros(((self.n, 3)))
         angle = noise.pnoise1(time) * math.pi * 2
-        forces[0:-1, 0] = math.cos(angle) * self.wind_magnitude
-        forces[0:-1, 2] = math.sin(angle) * self.wind_magnitude
+        forces[1:, 0] = math.cos(angle) * round(self.wind_magnitude)
+        forces[1:, 2] = math.sin(angle) * round(self.wind_magnitude)
         return forces
 
     def calculate_cell_rotations(self, s_n):
@@ -137,7 +139,7 @@ class Model:
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
         # s = np.diag(s)
-        s = np.diag(np.clip(s, 0.1, 1))
+        s = np.diag(np.clip(s, -1000, 1))
         return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_triangle_global_matrix(self):
