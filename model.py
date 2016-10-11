@@ -25,11 +25,15 @@ class Model:
                     in_faces.append(face)
             self.verts_to_tri.append(in_faces)
         self.uvs = uvs
+        self.stepsize = 1
         self.velocities = np.zeros((self.n, 3))
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
-        self.stepsize = 1
-        if(self.arap):
+        self.fixed_points = []
+        for con in self.constraints:
+            if con.type() == "FIXED":
+                self.fixed_points.append(con)
+        if self.arap:
             self.global_matrix = self.calculate_cell_global_matrix()
         else:
             self.global_matrix = self.calculate_triangle_global_matrix()
@@ -48,33 +52,37 @@ class Model:
 
     def simulate(self):
         self.count += 1
-        # forces = self.wind_forces(self.count) * 0.1
-        forces = np.zeros(((self.n, 3)))
-        if self.count < 100:
-        #     forces[1, 2] = 1
-            forces[1:, 1] = -100
-        # forces[1:, 1] = -10
+        forces = self.wind_forces(self.count) * 10
+        # forces = np.zeros(((self.n, 3)))
+        # if self.count < 50:
+        #     forces[1:, 2] = -100
+        # else:
+        # forces[1:, 2] = 10
+        # if self.count > 100:
+        #     self.count = 0
+        forces[1:, 1] = -100
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.verts + dist + acc
         q_n_1 = s_n
         M = self.mass_matrix / (self.stepsize * self.stepsize)
-        self.calculate_cell_rotations(s_n)
-        print(self.global_matrix)
+        if(self.arap):
+            self.calculate_cell_rotations(s_n)
         for i in range(1):
-            b_array = np.zeros((self.n + 1, 3))
+            b_array = np.zeros((self.n + len(self.fixed_points), 3))
             # b_array[0:-1] = M.dot(q_n_1)
             for i in range(self.n):
                 if(self.arap):
                     b_array[i] = self.calculate_b_for_cell(i)
                 else:
                     b_array[i] = self.calculate_b_for_triangle(i, s_n)
-            b_array[-1] = self.verts[0]
+            for con_i in range(len(self.fixed_points)):
+                con = self.fixed_points[con_i]
+                b_array[-(con_i + 1)] = self.verts[con.vert_a]
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
-            q_n_1 = q_n_1[0:-1, :] # all but last constrainted point
+            q_n_1 = q_n_1[0:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
 
-        self.velocities = np.around(((q_n_1 - self.verts) * self.drag) / self.stepsize, 11)
-        print("Velocitties \n", self.velocities)
+        self.velocities = np.around(((q_n_1 - self.verts)) / self.stepsize, 11)
         self.rendering_verts = q_n_1
         # self.verts = self.rendering_verts
 
@@ -106,10 +114,8 @@ class Model:
 
     def calculate_cell_rotations(self, s_n):
         self.cell_rotations = np.zeros((self.n, 3, 3))
-        print("Calculating Cell Rotations")
         for vert_id in range(self.n):
             rotation = self.calculate_rotation_matrix_for_cell(vert_id, s_n)
-            print(rotation)
             self.cell_rotations[vert_id] = rotation
 
     def potential_for_triangle(self, face, prime_verts, point):
@@ -135,8 +141,10 @@ class Model:
         return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_triangle_global_matrix(self):
-        weights = np.zeros((self.n + 1, self.n + 1))
-        weight_sum = np.zeros((self.n + 1, self.n + 1))
+        fixed_point_num = len(self.fixed_points)
+
+        weights = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
+        weight_sum = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
         for face in self.faces:
             verts = face.vertex_ids()
             for k in range(3):
@@ -146,15 +154,21 @@ class Model:
                 weights[v_2, v_1] += 1
                 weight_sum[v_1, v_1] += 1
                 weight_sum[v_2, v_2] += 1
+
         x = weight_sum - weights
-        x[0, -1] = 1
-        x[-1, 0] = 1
+        for  i in range(fixed_point_num):
+            con = self.fixed_points[i]
+            x[con.vert_a, -(i + 1)] = 1
+            x[-(i + 1), con.vert_a] = 1
         return x
 
     def calculate_cell_global_matrix(self):
-        M = np.identity(self.n + 1) / (self.stepsize * self.stepsize)
-        weights = np.zeros((self.n + 1, self.n + 1))
-        weight_sum = np.zeros((self.n + 1, self.n + 1))
+        fixed_point_num = len(self.fixed_points)
+
+        M = np.identity(self.n + fixed_point_num) / (self.stepsize * self.stepsize)
+        weights = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
+        weight_sum = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
+
         for con in self.constraints:
             if con.type() == "SPRING":
                 weights[con.vert_a, con.vert_b] = 1
@@ -164,8 +178,11 @@ class Model:
 
         # Fix some arbitraty last start point and end point
         x = weight_sum - weights
-        x[0, -1] = 1
-        x[-1, 0] = 1
+        for  i in range(fixed_point_num):
+            con = self.fixed_points[i]
+            x[con.vert_a, -(i + 1)] = 1
+            x[-(i + 1), con.vert_a] = 1
+        print(x)
         return x
 
     def calculate_rotation_matrix_for_cell(self, vert_id, s_n):
