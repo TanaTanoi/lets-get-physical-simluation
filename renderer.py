@@ -27,7 +27,12 @@ class Renderer:
             self.model = model.Model(values[0], values[1])
             self.model.center()
         else:
-            self.model = model.Model.generate_plane(8, 8)
+            self.models = []
+            size = 9
+            self.FPS = 30
+            self.models.append(model.Model.generate_plane(size, size))
+            self.models.append(model.Model.generate_plane(size, size, flag_type = "triangle"))
+            self.models.append(model.Model.generate_plane(size, size, flag_type = "spring"))
 
     def main(self):
         self.window = pyglet.window.Window()
@@ -41,13 +46,14 @@ class Renderer:
         return
 
     def update(self, dt):
-        self.model.simulate()
+        for model in self.models:
+            model.simulate()
 
     def initialize_window_callbacks(self):
         self.window.on_draw = self.on_draw
         self.window.on_key_press = self.on_key_press
         self.window.on_mouse_drag = self.on_mouse_drag
-        pyglet.clock.schedule_interval(self.update, 1 / 20.0)
+        pyglet.clock.schedule_interval(self.update, 1 / self.FPS)
 
     def mouse_input(self, button, state, x, y):
         print("MOUSE ", button, " state: ", state, " x: ", x, " y: ", y)
@@ -66,9 +72,15 @@ class Renderer:
 
     def on_draw(self):
         self.setup_camera()
+        glClear(GL_COLOR_BUFFER_BIT)
         glTranslatef(0, self.y, self.z)
         glRotatef(self.r_x, 0, 1, 0)
-        self.draw_object()
+        glPushMatrix()
+        glTranslatef(0, -75 * (len(self.models) - 1), 0)
+        for model in self.models:
+            self.draw_object(model)
+            glTranslatef(0, 300, 0)
+        glPopMatrix()
 
     def setup_camera(self):
         glMatrixMode(gl.GL_PROJECTION)
@@ -79,21 +91,20 @@ class Renderer:
 
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
 
-    def draw_object(self):
-        glClear(GL_COLOR_BUFFER_BIT)
+    def draw_object(self, model):
         glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
         glBegin(GL_TRIANGLES)
-        for face in self.model.faces:
+        for face in model.faces:
             for v_id in face.vertex_ids():
-                vert = self.model.rendering_verts[v_id]
-                uv = self.model.uvs[v_id]
+                vert = model.rendering_verts[v_id]
+                uv = model.uvs[v_id]
                 glTexCoord2f(uv[0], uv[1])
                 glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
 
         glBegin(GL_LINES)
         glVertex3f(0,-300,0)
-        vert = self.model.verts[0]
+        vert = model.verts[0]
         glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
 
@@ -120,13 +131,26 @@ class Renderer:
         elif(symbol == key.Z):
             self.r_x += 90
         elif(symbol == key.R):
-            self.model.wind_magnitude -= 0.05 * 10
-            print("Wind magnitude is ", self.model.wind_magnitude)
+            if(self.models[0].wind_magnitude == 0):
+                for model in self.models:
+                    model.wind_magnitude = 1
+            for model in self.models:
+                model.wind_magnitude *= 1.5
+            print("Wind magnitude is ", self.models[0].wind_magnitude)
         elif(symbol == key.T):
-            self.model.wind_magnitude += 0.05 * 10
-            print("Wind magnitude is ", self.model.wind_magnitude)
+            if(self.models[0].wind_magnitude < 1):
+                for model in self.models:
+                    model.wind_magnitude = 0
+            for model in self.models:
+                model.wind_magnitude /= 1.5
+            print("Wind magnitude is ", self.models[0].wind_magnitude)
+        elif(symbol == key.Y):
+            for model in self.models:
+                model.wind_magnitude *= -1
+            print("Wind magnitude is ", self.models[0].wind_magnitude)
         elif(symbol == key.SPACE):
-            self.model.simulate()
+            for model in self.models:
+                model.simulate()
         elif(symbol == key.ESCAPE): # escape
             exit()
 
