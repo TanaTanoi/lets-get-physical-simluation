@@ -54,19 +54,13 @@ class Model:
         self.count += 1
         forces = self.wind_forces(self.count)
         # forces = np.zeros(((self.n, 3)))
-        # if self.count < 50:
-        #     forces[:, 1] = -10
-        # forces[:, 1] = -10
-        # forces[self.n - 1:, 1] = -50
+        if self.count < 50:
+            forces[:, 1] = -100
+        # forces[:, 1] = -100
+        # forces[10 : self.n - 1, 2] = -50
         # zero out the forces on fixed points
         for con in self.fixed_points:
             forces[con.vert_a, :] = 0
-        # forces[20, :] = 0
-        # forces[1:, 2] = -100
-        # else:
-        # forces[1:, 2] = 10
-        # if self.count > 100:
-        #     self.count = 0
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.rendering_verts + dist + acc
@@ -204,8 +198,8 @@ class Model:
         covariance_matrix = self.calculate_covariance_matrix_for_cell(vert_id, s_n)
 
         U, s, V_transpose = np.linalg.svd(covariance_matrix)
-
-        rotation = V_transpose.transpose().dot(U.transpose())
+        s = np.diag(np.clip(s, -10, 1.4))
+        rotation = V_transpose.transpose().dot(s).dot(U.transpose())
         # if np.linalg.det(rotation) <= 0:
         #     U[:0] *= -1
         #     rotation = V_transpose.transpose().dot(U.transpose())
