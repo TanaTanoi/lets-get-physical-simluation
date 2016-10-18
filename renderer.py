@@ -27,7 +27,7 @@ class Renderer:
             self.model = model.Model(values[0], values[1])
             self.model.center()
         else:
-            self.model = model.Model.generate_plane(5, 5)
+            self.model = model.Model.generate_plane(8, 8)
 
     def main(self):
         self.window = pyglet.window.Window()

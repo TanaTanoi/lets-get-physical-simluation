@@ -25,7 +25,7 @@ class Model:
                     in_faces.append(face)
             self.verts_to_tri.append(in_faces)
         self.uvs = uvs
-        self.stepsize = 1
+        self.stepsize = 0.8
         self.velocities = np.zeros((self.n, 3))
         self.mass_matrix = np.identity(self.n)
         self.constraints = constraints
@@ -53,26 +53,30 @@ class Model:
     def simulate(self):
         self.count += 1
         forces = self.wind_forces(self.count)
-        forces[:, 1] = -10
-        forces[0, :] = 0
-        forces[20, :] = 0
         # forces = np.zeros(((self.n, 3)))
         # if self.count < 50:
-        #     forces[1:, 2] = -100
+        #     forces[:, 1] = -10
+        # forces[:, 1] = -10
+        # forces[self.n - 1:, 1] = -50
+        # zero out the forces on fixed points
+        for con in self.fixed_points:
+            forces[con.vert_a, :] = 0
+        # forces[20, :] = 0
+        # forces[1:, 2] = -100
         # else:
         # forces[1:, 2] = 10
         # if self.count > 100:
         #     self.count = 0
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
-        s_n = self.verts + dist + acc
+        s_n = self.rendering_verts + dist + acc
         q_n_1 = s_n
-        M = self.mass_matrix / (self.stepsize * self.stepsize)
+        # M = self.mass_matrix / (self.stepsize * self.stepsize)
         if(self.arap):
             self.calculate_cell_rotations(s_n)
         for i in range(1):
             b_array = np.zeros((self.n + len(self.fixed_points), 3))
-            # b_array[0:-1] = M.dot(q_n_1)
+            # b_array[:-len(self.fixed_points)] = M.dot(q_n_1)
             for i in range(self.n):
                 if(self.arap):
                     b_array[i] = self.calculate_b_for_cell(i)
@@ -82,9 +86,10 @@ class Model:
                 con = self.fixed_points[con_i]
                 b_array[-(con_i + 1)] = self.verts[con.vert_a]
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
-            q_n_1 = q_n_1[0:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
+            q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
 
-        self.velocities = np.around(((q_n_1 - self.verts)) / self.stepsize, 11)
+        self.velocities = ((q_n_1 - self.rendering_verts) * 0.9) / self.stepsize
+        # self.velocities = np.around(((q_n_1 - self.verts)) / self.stepsize, 11)
         self.rendering_verts = q_n_1
         # self.verts = self.rendering_verts
 
@@ -92,6 +97,12 @@ class Model:
         b = np.zeros((1, 3))
         for face in self.verts_to_tri[i]:
             T = self.potential_for_triangle(face, s_n, i)
+            # T = np.identity(3)
+            # theta = math.radians(90)
+            # T[0, 0] = math.cos(theta)
+            # T[0, 2] = -math.sin(theta)
+            # T[2, 0] = math.sin(theta)
+            # T[2, 2] = math.cos(theta)
             for o_v in face.other_points(i):
                 b += T.dot(self.verts[i] - self.verts[o_v])
         return b
@@ -110,9 +121,9 @@ class Model:
         time /= 10000
         forces = np.zeros(((self.n, 3)))
         angle = noise.pnoise1(time) * math.pi * 2
-        forces[1:, 0] = math.cos(angle) * round(self.wind_magnitude)
-        forces[1:, 2] = math.sin(angle) * round(self.wind_magnitude)
-        return forces
+        forces[:, 0] = math.cos(angle)
+        forces[:, 2] = math.sin(angle)
+        return forces * self.wind_magnitude * 10
 
     def calculate_cell_rotations(self, s_n):
         self.cell_rotations = np.zeros((self.n, 3, 3))
@@ -125,21 +136,23 @@ class Model:
         v1 = self.verts[point]
         v2 = self.verts[other_points[0]]
         v3 = self.verts[other_points[1]]
-        x_f = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
+        x_g = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
 
         v1 = prime_verts[point]
         v2 = prime_verts[other_points[0]]
         v3 = prime_verts[other_points[1]]
-        x_g = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
+        x_f = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
 
-        combined = x_g.dot(np.linalg.pinv(x_f))
+        combined = x_f.dot(np.linalg.pinv(x_g))
         return self.clamped_svd_for_matrix(combined)
+        # return combined
         # return np.identity(3)
 
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
         # s = np.diag(s)
-        s = np.diag(np.clip(s, -1000, 1))
+        # s = np.identity(3)
+        s = np.diag(np.clip(s, -100000, 2))
         return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_triangle_global_matrix(self):
