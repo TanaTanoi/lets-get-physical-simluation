@@ -11,6 +11,8 @@ import model
 from PIL import Image
 
 class Renderer:
+    SAVE_TO_IMAGES = True
+    DRAW_LINES = True
     def __init__(self, filename=""):
         # m_ is the mouse prefix
         self.m_x = 0
@@ -18,7 +20,7 @@ class Renderer:
         self.m_down = False
         # r_ is the rotations prefix
         self.r_x = 0
-        self.z = -500
+        self.z = -1000
         self.y = 100
         self.x = 0
         if len(filename) > 0:
@@ -28,8 +30,8 @@ class Renderer:
             self.model.center()
         else:
             self.models = []
-            size = 9
-            self.FPS = 30
+            size = 8
+            self.FPS = 25
             self.models.append(model.Model.generate_plane(size, size))
             self.models.append(model.Model.generate_plane(size, size, flag_type = "triangle"))
             self.models.append(model.Model.generate_plane(size, size, flag_type = "spring"))
@@ -48,6 +50,16 @@ class Renderer:
     def update(self, dt):
         for model in self.models:
             model.simulate()
+        if self.SAVE_TO_IMAGES:
+
+            a = [0] * (self.window.width * self.window.height * 3)
+            a = (GLuint * len(a))(*a)
+            glReadPixels(0, 0, self.window.width, self.window.height, GL_RGB, GL_UNSIGNED_BYTE, a)
+            a = np.array(a)
+            a = a.reshape((self.window.height, self.window.width, 3))
+            image = Image.fromarray(a, "RGB")
+            image = image.transpose(Image.FLIP_TOP_BOTTOM)
+            image.save("/Users/tanatanoi/Documents/university/CGRA409/project/vid/" + str(self.models[0].count)+".jpg")
 
     def initialize_window_callbacks(self):
         self.window.on_draw = self.on_draw
@@ -92,15 +104,27 @@ class Renderer:
         glClear(GL_COLOR_BUFFER_BIT|GL_DEPTH_BUFFER_BIT)
 
     def draw_object(self, model):
-        glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
+        if self.DRAW_LINES:
+            glLineWidth(1)
+            glPolygonMode( GL_FRONT_AND_BACK, GL_LINE )
+            glBegin(GL_TRIANGLES)
+            for face in model.faces:
+                for v_id in face.vertex_ids():
+                    vert = model.rendering_verts[v_id]
+                    glColor3f(1,0,0)
+                    glVertex3f(vert[0], vert[1], vert[2])
+            glEnd()
+        glPolygonMode(GL_FRONT_AND_BACK, GL_FILL)
         glBegin(GL_TRIANGLES)
         for face in model.faces:
             for v_id in face.vertex_ids():
                 vert = model.rendering_verts[v_id]
                 uv = model.uvs[v_id]
+                glColor3f(1,1,1)
                 glTexCoord2f(uv[0], uv[1])
                 glVertex3f(vert[0], vert[1], vert[2])
         glEnd()
+
 
         glBegin(GL_LINES)
         glVertex3f(0,-300,0)
@@ -138,7 +162,7 @@ class Renderer:
                 model.wind_magnitude *= 1.5
             print("Wind magnitude is ", self.models[0].wind_magnitude)
         elif(symbol == key.T):
-            if(self.models[0].wind_magnitude < 1):
+            if(abs(self.models[0].wind_magnitude) < 1):
                 for model in self.models:
                     model.wind_magnitude = 0
             for model in self.models:
@@ -203,6 +227,9 @@ class Renderer:
 
     def opengl_array(array):
         return (GLfloat * len(array))(*array)
+
+    def opengl_int_array(array):
+        return (GLuint * len(array))(*array)
 
 # if __name__ == '__main__': main()
 r = Renderer()

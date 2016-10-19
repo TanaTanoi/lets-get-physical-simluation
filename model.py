@@ -43,7 +43,7 @@ class Model:
         elif self.flag_type == "spring":
             self.global_matrix = self.calculate_spring_global_matrix()
         self.count = 0
-        self.wind_magnitude = 0
+        self.wind_magnitude = 5
         print(self.global_matrix)
 
     def center(self):
@@ -148,11 +148,12 @@ class Model:
     def wind_forces(self, time):
         time /= 500
         forces = np.zeros(((self.n, 3)))
-        angle = noise.pnoise1(time) * math.pi * 2
-        forces[:, 0] = 1
-        # forces[:, 2] = math.sin(angle)
+        # angle = noise.pnoise1(time) * math.pi * 0.5
+        angle = math.radians(10)
+        forces[:, 0] = math.cos(angle)
+        forces[:, 2] = math.sin(angle)
         # print(self.wind_magnitude * noise.pnoise1(time))
-        return forces * self.wind_magnitude * noise.pnoise1(time)
+        return forces * self.wind_magnitude * (noise.pnoise1(time) + 0.2)
 
     def calculate_cell_rotations(self, s_n):
         self.cell_rotations = np.zeros((self.n, 3, 3))
@@ -260,7 +261,7 @@ class Model:
         covariance_matrix = self.calculate_covariance_matrix_for_cell(vert_id, s_n)
 
         U, s, V_transpose = np.linalg.svd(covariance_matrix)
-        s = np.diag(np.clip(s, -10, 1.4))
+        s = np.diag(np.clip(s, -10, 1))
         rotation = V_transpose.transpose().dot(s).dot(U.transpose())
         # if np.linalg.det(rotation) <= 0:
         #     U[:0] *= -1
