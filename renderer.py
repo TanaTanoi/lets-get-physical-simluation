@@ -11,9 +11,9 @@ import model
 from PIL import Image
 
 class Renderer:
-    SAVE_TO_IMAGES = True
+    SAVE_TO_IMAGES = False
     DRAW_LINES = True
-    def __init__(self, filename=""):
+    def __init__(self, size=8, flags=["spring"]):
         # m_ is the mouse prefix
         self.m_x = 0
         self.m_y = 0
@@ -23,18 +23,10 @@ class Renderer:
         self.z = -1000
         self.y = 100
         self.x = 0
-        if len(filename) > 0:
-            values = offfile.OffFile(filename)
-            values = values.read_file()
-            self.model = model.Model(values[0], values[1])
-            self.model.center()
-        else:
-            self.models = []
-            size = 8
-            self.FPS = 25
-            self.models.append(model.Model.generate_plane(size, size))
-            self.models.append(model.Model.generate_plane(size, size, flag_type = "triangle"))
-            self.models.append(model.Model.generate_plane(size, size, flag_type = "spring"))
+        self.models = []
+        self.FPS = 25
+        for flag_type in flags:
+            self.models.append(model.Model.generate_plane(size, size, flag_type=flag_type))
 
     def main(self):
         self.window = pyglet.window.Window()
@@ -175,6 +167,8 @@ class Renderer:
         elif(symbol == key.SPACE):
             for model in self.models:
                 model.simulate()
+        elif(symbol == key.F):
+            self.DRAW_LINES = not self.DRAW_LINES
         elif(symbol == key.ESCAPE): # escape
             exit()
 
@@ -232,5 +226,12 @@ class Renderer:
         return (GLuint * len(array))(*array)
 
 # if __name__ == '__main__': main()
-r = Renderer()
+size = 8
+flags = ["spring"]
+if len(sys.argv) > 1:
+    size = int(sys.argv[1])
+if len(sys.argv) > 2:
+    flags = sys.argv[2:]
+print(sys.argv[2:-1])
+r = Renderer(size=size, flags=flags)
 r.main()
