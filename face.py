@@ -24,3 +24,6 @@ class Face:
 
     def off_string(self):
         return "3 " + str(self.v1) + " " + str(self.v2) + " " + str(self.v3)
+
+    def center_of_triangle(self, verts):
+        return (verts[self.v1] + verts[self.v2] + verts[self.v3]) / 3.0

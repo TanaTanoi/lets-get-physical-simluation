@@ -37,15 +37,16 @@ class Constraint:
             strech_amount = dir_vec_length - self.rest_length
 
             dir_vec_normalized = dir_vec / dir_vec_length
-            update_vec = (strech_amount  * dir_vec_normalized) * 0.5
+            update_vec = (strech_amount * 0.3) * dir_vec_normalized * -1
 
-            v_a = verts[self.vert_a] - update_vec
-            v_b = verts[self.vert_b] + update_vec
-            diff = (v_a - v_b)
-            b_array[self.vert_a] += v_a
-            b_array[self.vert_b] += v_b
+            # v_a = verts[self.vert_a] - update_vec
+            # v_b = verts[self.vert_b] + update_vec
+            # diff = (v_a - v_b)
+            b_array[self.vert_a] += update_vec
+            b_array[self.vert_b] -= update_vec
         else:
             b_array[self.vert_a] += self.fixed_point
+            # print("-")
 
     def S_matrix(constraint_type, n, vert_a, vert_b=False):
         if constraint_type  == "SPRING":
