@@ -10,7 +10,7 @@ np.set_printoptions(linewidth=2000)
 default_flag_type = "spring"
 class Model:
     drag = 0.95
-    flag_type = default_flag_type # spring" or "triangle"
+    flag_type = default_flag_type # spring" or "exp_tri" or "imp_tri"
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[], flag_type=default_flag_type):
         self.flag_type = flag_type
         self.n = len(verts)
@@ -36,10 +36,9 @@ class Model:
         for con in self.constraints:
             if con.type() == "FIXED":
                 self.fixed_points.append(con)
-        if self.flag_type == "triangle":
+        if self.flag_type == "imp_tri":
+            self.mass_matrix /= (len(self.faces))
             self.global_matrix = self.calculate_triangle_global_matrix()
-        elif self.flag_type == "spring":
-            self.global_matrix = self.calculate_spring_global_matrix()
         self.count = 0
         self.wind_magnitude = 5
 
@@ -53,17 +52,19 @@ class Model:
             self.verts[vert_id] += middle_point
 
     def simulate(self):
+        self.count += 1
         if self.flag_type == "spring":
             self.simulate_spring()
-        else:
+        elif self.flag_type == "imp_tri":
             self.simulate_triangle()
+        elif self.flag_type == "exp_tri":
+            self.simulate_triangle_explicit()
 
     def simulate_triangle_explicit(self):
         forces = self.wind_forces(self.count)
         forces[:, 1] = -10
         s_n = self.rendering_verts
         for face in self.faces:
-            # T = self.T_for_triangle(face, self.rendering_verts)
             res_tri_center = face.center_of_triangle(self.verts)
             def_tri_center = face.center_of_triangle(s_n)
             for vert_id in face.vertex_ids():
@@ -71,93 +72,54 @@ class Model:
                 x = self.verts[vert_id] - res_tri_center # bring to origin
                 x = T.dot(x) # apply rotation
                 x = x + def_tri_center # reset to original spot
-                # Maybe add the diff to the forces instead?
-                # s_n[vert_id] = x
                 y = (x - s_n[vert_id])
                 forces[vert_id] = forces[vert_id] + y
 
-        acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
+        acc = (self.stepsize * self.stepsize) * linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.rendering_verts + dist + acc
-
 
         for con_i in range(len(self.fixed_points)):
             con = self.fixed_points[con_i]
             s_n[con.vert_a] = self.verts[con.vert_a]
         self.rendering_verts = s_n
-        # for i in range(self.n):
-        #     b_array[i] += self.calculate_b_for_triangle(i, s_n).reshape(3,)
-        # for con_i in range(len(self.fixed_points)):
-        #     con = self.fixed_points[con_i]
-        #     b_array[-(con_i + 1)] = self.verts[con.vert_a]
-        # q_n_1 = np.linalg.solve(self.global_matrix, b_array)
-        # q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
 
     def simulate_triangle(self):
         forces = self.wind_forces(self.count)
-        forces[:, 1] = -10
+        forces[:, 1] = -1
 
         acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
         dist = self.velocities * self.stepsize
         s_n = self.rendering_verts + dist + acc
-
+        q_n_1 = np.copy(s_n)
         b_array = np.zeros((self.n + len(self.fixed_points), 3))
-        M = np.identity(self.n) / (self.stepsize * self.stepsize)
+        M = self.mass_matrix / (self.stepsize * self.stepsize)
 
-        b_array[:self.n] = M.dot(s_n)
+        for _ in range(1):
+            b_array[:self.n] = M.dot(s_n)
+            for face in self.faces:
+                f_verts = face.vertex_ids()
+                for i in range(3):
+                    v1 = f_verts[i]
+                    v2 = f_verts[(i + 1) % 3]
+                    T = self.potential_for_triangle(face, q_n_1, v2)
+                    edge = self.verts[v2] - self.verts[v1]
+                    g = T.dot(edge)
+                    b_array[v1] = b_array[v1] - g
+                    b_array[v2] = b_array[v2] + g
 
-        for face in self.faces:
-            f_verts = face.vertex_ids()
-            for i in range(3):
-                v1 = f_verts[i]
-                v2 = f_verts[(i + 1) % 3]
-                T = self.potential_for_triangle(face, s_n, v2)
-                edge = self.verts[v2] - self.verts[v1]
-                g = T.dot(edge)
-                b_array[v1] = b_array[v1] - g
-                b_array[v2] = b_array[v2] + g
-
-        for con_i in range(len(self.fixed_points)):
-            con = self.fixed_points[con_i]
-            b_array[-(con_i + 1)] = self.verts[con.vert_a]
-
-        q_n_1 = np.linalg.solve(self.global_matrix, b_array)
-        q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
-        self.velocities = ((q_n_1 - self.rendering_verts) * 0.9) / self.stepsize
-
-        self.rendering_verts = q_n_1
-
-    def simulate_arap(self):
-        self.count += 1
-        forces = self.wind_forces(self.count) *50
-        forces[:, 1] = -100
-        # zero out the forces on fixed points
-        for con in self.fixed_points:
-            forces[con.vert_a, :] = 0
-        acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
-        dist = self.velocities * self.stepsize
-        s_n = self.rendering_verts + dist + acc
-        q_n_1 = s_n
-        M = np.identity(self.n) / (self.stepsize * self.stepsize)
-
-        for i in range(1):
-            b_array = np.zeros((self.n + len(self.fixed_points), 3))
-            # b_array[:self.n] = M.dot(s_n)
-            for i in range(self.n):
-                b_array[i] += self.calculate_b_for_triangle(i, s_n).reshape(3,)
+        # Assign fixed points
             for con_i in range(len(self.fixed_points)):
                 con = self.fixed_points[con_i]
                 b_array[-(con_i + 1)] = self.verts[con.vert_a]
+
             q_n_1 = np.linalg.solve(self.global_matrix, b_array)
             q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
-
         self.velocities = ((q_n_1 - self.rendering_verts) * 0.9) / self.stepsize
-        # self.velocities = np.around(((q_n_1 - self.verts)) / self.stepsize, 11)
+
         self.rendering_verts = q_n_1
-        # self.verts = self.rendering_verts
 
     def simulate_spring(self):
-        self.count += 1
         forces = self.wind_forces(self.count)
         forces[:, 1] = -5
 
@@ -170,32 +132,9 @@ class Model:
         dist = self.velocities * self.stepsize
         q_n_1 = self.rendering_verts + dist + acc
 
-
-
         self.velocities = (q_n_1 - self.rendering_verts) * self.drag / self.stepsize
 
-        # M = self.mass_matrix / (self.stepsize * self.stepsize)
-
         self.rendering_verts = q_n_1
-
-        # for i in range(1):
-        #     b_array = np.zeros((self.n + len(self.fixed_points), 3))
-        #     b_array[:-len(self.fixed_points)] = M.dot(q_n_1)
-        # 
-        #     for con in self.constraints:
-        #         con.calculateRHS(s_n, b_array)
-        # 
-        #     for con_i in range(len(self.fixed_points)):
-        #         con = self.fixed_points[con_i]
-        #         b_array[-1 * con_i - 1] = self.verts[con.vert_a]
-        #     q_n_1 = linalg.solve(self.global_matrix, b_array.flatten())
-        #     q_n_1 = q_n_1[:self.n * 3] # remove fixed points
-        #     q_n_1 = np.reshape(q_n_1, (self.n, 3))
-        # self.velocities = (q_n_1 - self.rendering_verts) * self.drag / self.stepsize
-        # self.rendering_verts = np.reshape(q_n_1, (self.n, 3))
-
-
-
 
     def calculate_b_for_triangle(self, i, s_n):
         b = np.zeros((1, 3))
@@ -208,12 +147,11 @@ class Model:
     def wind_forces(self, time):
         time /= 500
         forces = np.zeros(((self.n, 3)))
-        # angle = noise.pnoise1(time) * math.pi * 0.5
-        angle = math.radians(10)
+        angle = noise.pnoise1(time) * math.pi * 0.5
         forces[:, 0] = math.cos(angle)
         forces[:, 2] = math.sin(angle)
-        # print(self.wind_magnitude * noise.pnoise1(time))
-        return forces * self.wind_magnitude * (noise.pnoise1(time) + 0.2)
+        # Forces * max magnitude * perlins random * randomness influence between 0.5 and 1
+        return forces * self.wind_magnitude * (noise.pnoise1(time)  + 0.2) * (noise.pnoise1(noise.pnoise1(time)) * 0.5 + 0.5)
 
     def potential_for_triangle(self, face, prime_verts, point):
         other_points = face.other_points(point)
@@ -228,37 +166,18 @@ class Model:
         x_f = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
 
         combined = x_f.dot(np.linalg.pinv(x_g))
-        U, s, V_transpose = np.linalg.svd(combined)
-        rotation = U.dot(V_transpose)
-        return rotation
-        # return combined
-        # return np.identity(3)
-
-    def T_for_triangle(self, face, prime_verts):
-        points = face.vertex_ids()
-        v1 = self.verts[points[0]]
-        v2 = self.verts[points[0]]
-        v3 = self.verts[points[1]]
-        x_g = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
-
-        v1 = prime_verts[points[0]]
-        v2 = prime_verts[points[1]]
-        v3 = prime_verts[points[2]]
-        x_f = np.matrix((v3 - v1, v2 - v1, (0,0,0))).T
-
-        # return x_f.dot(np.linalg.pinv(x_g))
-        return np.identity(3)
+        return self.clamped_svd_for_matrix(combined)
 
     def clamped_svd_for_matrix(self, matrix):
         U, s, V_t = np.linalg.svd(matrix)
-        # s = np.diag(s)
-        # s = np.identity(3)
-        s = np.diag(np.clip(s, -100000, 1))
+        s = np.diag(np.clip(s, 0, 1.1))
         return np.around(U.dot(s).dot(V_t), 11)
 
     def calculate_triangle_global_matrix(self):
         fixed_point_num = len(self.fixed_points)
-        M = np.identity(self.n + fixed_point_num) / (self.stepsize * self.stepsize)
+        M = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
+        M[:self.n, :self.n] = self.mass_matrix
+        M /= (self.stepsize * self.stepsize)
 
         weights = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
         weight_sum = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
@@ -279,34 +198,6 @@ class Model:
             x[-(i + 1), con.vert_a] = 1
             M[-(i + 1), -(i + 1)] = 0
         return x + M
-
-    def calculate_spring_global_matrix(self):
-        fixed_point_num = len(self.fixed_points)
-
-        number_of_points = (self.n + fixed_point_num) * 3
-        M = np.identity(number_of_points) / (self.stepsize * self.stepsize)
-        print(M.shape)
-        sum_m = np.zeros((number_of_points, number_of_points))
-
-        for con in self.constraints:
-            S = con.S
-            A = con.A
-            x = S.T.dot(A.T.dot(A.dot(S)))
-            sum_m[:self.n * 3, :self.n * 3] += x
-
-        for  i in range(fixed_point_num):
-            j = i * 3
-            M[-(j + 1), -(j + 1)] = 0
-            M[-(j + 2), -(j + 2)] = 0
-            M[-(j + 3), -(j + 3)] = 0
-            con = self.fixed_points[i]
-            M[con.vert_a * 3, -(j + 1)] = 1
-            M[con.vert_a * 3 + 1, -(j + 2)] = 1
-            M[con.vert_a * 3 + 2, -(j + 3)] = 1
-            M[-(j + 1), con.vert_a * 3] = 1
-            M[-(j + 2), con.vert_a * 3 + 1] = 1
-            M[-(j + 3), con.vert_a * 3 + 2] = 1
-        return M + sum_m
 
     def generate_plane(width, height, MAX_WIDTH_SIZE=500, MAX_HEIGHT_SIZE=300, flag_type=default_flag_type):
 

@@ -12,7 +12,7 @@ from PIL import Image
 
 class Renderer:
     SAVE_TO_IMAGES = False
-    DRAW_LINES = True
+    DRAW_LINES = False
     def __init__(self, size=8, flags=["spring"]):
         # m_ is the mouse prefix
         self.m_x = 0
@@ -24,7 +24,7 @@ class Renderer:
         self.y = 100
         self.x = 0
         self.models = []
-        self.FPS = 25
+        self.FPS = 40
         for flag_type in flags:
             self.models.append(model.Model.generate_plane(size, size, flag_type=flag_type))
 

@@ -10,7 +10,7 @@ Python 3, NumPy, PyGlet, PIL
 
 `python3 renderer.py [size] [flag_types]`
 
-`size` is an integer for the size of the flag (i.e. `20` will give a 20 by 20 vert flag). `flag_types` is a space separated argument where each one is either `spring`, `cell`, or `triangle`, depending on the type of flags desired.
+`size` is an integer for the size of the flag (i.e. `20` will give a 20 by 20 vert flag). `flag_types` is a space separated argument where each one is either `spring`, `exp_tri`, or `imp_tri`, depending on the type of flags desired (Explicit Spring based, Explicit Triangle elements, or Implicit Triangle Elements).
 
 ## Controls
 
