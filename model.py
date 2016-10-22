@@ -7,10 +7,10 @@ import math
 
 np.set_printoptions(linewidth=2000)
 
-default_flag_type = "cell"
+default_flag_type = "spring"
 class Model:
     drag = 0.95
-    flag_type = default_flag_type # "cell" or "spring" or "triangle"
+    flag_type = default_flag_type # spring" or "triangle"
     def __init__(self, verts, faces, neighbours=[], uvs = [], constraints=[], flag_type=default_flag_type):
         self.flag_type = flag_type
         self.n = len(verts)
@@ -36,9 +36,7 @@ class Model:
         for con in self.constraints:
             if con.type() == "FIXED":
                 self.fixed_points.append(con)
-        if self.flag_type == "cell":
-            self.global_matrix = self.calculate_cell_global_matrix()
-        elif self.flag_type == "triangle":
+        if self.flag_type == "triangle":
             self.global_matrix = self.calculate_triangle_global_matrix()
         elif self.flag_type == "spring":
             self.global_matrix = self.calculate_spring_global_matrix()
@@ -142,16 +140,11 @@ class Model:
         q_n_1 = s_n
         M = np.identity(self.n) / (self.stepsize * self.stepsize)
 
-        if(self.flag_type == "cell"):
-            self.calculate_cell_rotations(s_n)
         for i in range(1):
             b_array = np.zeros((self.n + len(self.fixed_points), 3))
             # b_array[:self.n] = M.dot(s_n)
             for i in range(self.n):
-                if(self.flag_type == "cell"):
-                    b_array[i] += self.calculate_b_for_cell(i).reshape(3,)
-                else:
-                    b_array[i] += self.calculate_b_for_triangle(i, s_n).reshape(3,)
+                b_array[i] += self.calculate_b_for_triangle(i, s_n).reshape(3,)
             for con_i in range(len(self.fixed_points)):
                 con = self.fixed_points[con_i]
                 b_array[-(con_i + 1)] = self.verts[con.vert_a]
@@ -212,16 +205,6 @@ class Model:
                 b += T.dot(self.verts[i] - self.verts[o_v])
         return b
 
-    def calculate_b_for_cell(self, i):
-        b = np.zeros((1, 3))
-        neighbours = self.neighbours[i]
-        for j in neighbours:
-            r_ij = self.cell_rotations[i] + self.cell_rotations[j]
-            p_ij = self.verts[i] - self.verts[j]
-            b += r_ij.dot(p_ij) * 0.5
-            # 1/2 for weight
-        return b
-
     def wind_forces(self, time):
         time /= 500
         forces = np.zeros(((self.n, 3)))
@@ -231,11 +214,6 @@ class Model:
         forces[:, 2] = math.sin(angle)
         # print(self.wind_magnitude * noise.pnoise1(time))
         return forces * self.wind_magnitude * (noise.pnoise1(time) + 0.2)
-
-    def calculate_cell_rotations(self, s_n):
-        self.cell_rotations = np.zeros((self.n, 3, 3))
-        for vert_id in range(self.n):
-            self.cell_rotations[vert_id] = self.calculate_rotation_matrix_for_cell(vert_id, s_n)
 
     def potential_for_triangle(self, face, prime_verts, point):
         other_points = face.other_points(point)
@@ -302,28 +280,6 @@ class Model:
             M[-(i + 1), -(i + 1)] = 0
         return x + M
 
-    def calculate_cell_global_matrix(self):
-        fixed_point_num = len(self.fixed_points)
-
-        # M = np.identity(self.n + fixed_point_num) / (self.stepsize * self.stepsize)
-        weights = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
-        weight_sum = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
-
-        for con in self.constraints:
-            if con.type() == "SPRING":
-                weights[con.vert_a, con.vert_b] = 1
-                weights[con.vert_b, con.vert_a] = 1
-                weight_sum[con.vert_a, con.vert_a] += 1
-                weight_sum[con.vert_b, con.vert_b] += 1
-
-        # Fix some arbitraty last start point and end point
-        x = weight_sum - weights
-        for  i in range(fixed_point_num):
-            con = self.fixed_points[i]
-            x[con.vert_a, -(i + 1)] = 1
-            x[-(i + 1), con.vert_a] = 1
-        return x
-
     def calculate_spring_global_matrix(self):
         fixed_point_num = len(self.fixed_points)
 
@@ -351,47 +307,6 @@ class Model:
             M[-(j + 2), con.vert_a * 3 + 1] = 1
             M[-(j + 3), con.vert_a * 3 + 2] = 1
         return M + sum_m
-
-    def calculate_rotation_matrix_for_cell(self, vert_id, s_n):
-        covariance_matrix = self.calculate_covariance_matrix_for_cell(vert_id, s_n)
-
-        U, s, V_transpose = np.linalg.svd(covariance_matrix)
-        s = np.diag(np.clip(s, -10, 1))
-        rotation = V_transpose.transpose().dot(s).dot(U.transpose())
-        # if np.linalg.det(rotation) <= 0:
-        #     U[:0] *= -1
-        #     rotation = V_transpose.transpose().dot(U.transpose())
-        return rotation
-
-    def calculate_covariance_matrix_for_cell(self, vert_id, s_n):
-        # result = np.zeros((3, 3))
-        # neighbours = self.neighbours[vert_id]
-        # for n_id in neighbours:
-        #     e_ij = self.verts[vert_id] - self.verts[n_id]
-        #     e_ij_p = s_n[vert_id] - s_n[n_id]
-        #     e_ij_p = np.matrix(e_ij_p)
-        #     result += e_ij.dot(e_ij_p.T)
-        # return result
-        vert_i_prime = s_n[vert_id]
-        vert_i = self.verts[vert_id]
-
-        neighbour_ids = self.neighbours[vert_id]
-        number_of_neighbours = len(neighbour_ids)
-
-        P_i =       np.zeros((3, number_of_neighbours))
-        P_i_prime = np.zeros((3, number_of_neighbours))
-
-        for n_i in range(number_of_neighbours):
-            n_id = neighbour_ids[n_i]
-
-            vert_j = self.verts[n_id]
-            vert_j_prime = s_n[n_id]
-
-            P_i[:, n_i] = (vert_i - vert_j)
-            P_i_prime[:, n_i] = (vert_i_prime - vert_j_prime)
-
-        P_i_prime = P_i_prime.transpose()
-        return P_i.dot(P_i_prime)
 
     def generate_plane(width, height, MAX_WIDTH_SIZE=500, MAX_HEIGHT_SIZE=300, flag_type=default_flag_type):
 
