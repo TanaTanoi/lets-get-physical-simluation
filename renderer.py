@@ -24,7 +24,7 @@ class Renderer:
         self.y = 100
         self.x = 0
         self.models = []
-        self.FPS = 300
+        self.FPS = 25
         for flag_type in flags:
             self.models.append(model.Model.generate_plane(size, size, flag_type=flag_type))
 

@@ -44,14 +44,6 @@ class Model:
             self.global_matrix = self.calculate_spring_global_matrix()
         self.count = 0
         self.wind_magnitude = 5
-        for con_i in range(len(self.fixed_points)):
-            con = self.fixed_points[con_i]
-            print("constraint point ", con.vert_a)
-            self.rendering_verts[con.vert_a] = self.verts[con.vert_a]
-        # print('dis thang')
-        # print(self.calculate_triangle_global_matrix() - self.calculate_cell_global_matrix())
-        # print('other thang')
-        print(self.global_matrix)
 
     def center(self):
         middle_point = np.array((0., 0., 0.))
@@ -66,11 +58,10 @@ class Model:
         if self.flag_type == "spring":
             self.simulate_spring()
         else:
-            self.simulate_triangle_explicit()
+            self.simulate_triangle()
 
     def simulate_triangle_explicit(self):
         forces = self.wind_forces(self.count)
-        # forces = np.zeros((self.n, 3))
         forces[:, 1] = -10
         s_n = self.rendering_verts
         for face in self.faces:
@@ -104,6 +95,39 @@ class Model:
         # q_n_1 = np.linalg.solve(self.global_matrix, b_array)
         # q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
 
+    def simulate_triangle(self):
+        forces = self.wind_forces(self.count)
+        forces[:, 1] = -10
+
+        acc = (self.stepsize * self.stepsize) *  linalg.inv(self.mass_matrix).dot(forces)
+        dist = self.velocities * self.stepsize
+        s_n = self.rendering_verts + dist + acc
+
+        b_array = np.zeros((self.n + len(self.fixed_points), 3))
+        M = np.identity(self.n) / (self.stepsize * self.stepsize)
+
+        b_array[:self.n] = M.dot(s_n)
+
+        for face in self.faces:
+            f_verts = face.vertex_ids()
+            for i in range(3):
+                v1 = f_verts[i]
+                v2 = f_verts[(i + 1) % 3]
+                T = self.potential_for_triangle(face, s_n, v2)
+                edge = self.verts[v2] - self.verts[v1]
+                g = T.dot(edge)
+                b_array[v1] = b_array[v1] - g
+                b_array[v2] = b_array[v2] + g
+
+        for con_i in range(len(self.fixed_points)):
+            con = self.fixed_points[con_i]
+            b_array[-(con_i + 1)] = self.verts[con.vert_a]
+
+        q_n_1 = np.linalg.solve(self.global_matrix, b_array)
+        q_n_1 = q_n_1[:-len(self.fixed_points), :] # Don't grab the unwanted fixed points
+        self.velocities = ((q_n_1 - self.rendering_verts) * 0.9) / self.stepsize
+
+        self.rendering_verts = q_n_1
 
     def simulate_arap(self):
         self.count += 1
@@ -141,8 +165,8 @@ class Model:
 
     def simulate_spring(self):
         self.count += 1
-        forces = self.wind_forces(self.count) * 0
-        # forces[:, 1] = -0.05
+        forces = self.wind_forces(self.count)
+        forces[:, 1] = -5
 
         for con in self.constraints:
             con.calculateRHS(self.rendering_verts, forces)
@@ -227,7 +251,7 @@ class Model:
 
         combined = x_f.dot(np.linalg.pinv(x_g))
         U, s, V_transpose = np.linalg.svd(combined)
-        rotation = V_transpose.transpose().dot(U.transpose())
+        rotation = U.dot(V_transpose)
         return rotation
         # return combined
         # return np.identity(3)
@@ -256,7 +280,7 @@ class Model:
 
     def calculate_triangle_global_matrix(self):
         fixed_point_num = len(self.fixed_points)
-        # M = np.identity(self.n + fixed_point_num) / (self.stepsize * self.stepsize)
+        M = np.identity(self.n + fixed_point_num) / (self.stepsize * self.stepsize)
 
         weights = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
         weight_sum = np.zeros((self.n + fixed_point_num, self.n + fixed_point_num))
@@ -275,7 +299,8 @@ class Model:
             con = self.fixed_points[i]
             x[con.vert_a, -(i + 1)] = 1
             x[-(i + 1), con.vert_a] = 1
-        return x
+            M[-(i + 1), -(i + 1)] = 0
+        return x + M
 
     def calculate_cell_global_matrix(self):
         fixed_point_num = len(self.fixed_points)
